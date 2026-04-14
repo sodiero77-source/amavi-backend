@@ -4,7 +4,9 @@ import { AppModule } from './app.module';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
+
   app.setGlobalPrefix('api');
+
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -12,6 +14,10 @@ async function bootstrap(): Promise<void> {
       forbidNonWhitelisted: true,
     }),
   );
+
+  app.getHttpAdapter().get('/', (_req, res) => {
+    res.send('Amavi API Running');
+  });
 
   await app.listen(process.env.PORT ? Number(process.env.PORT) : 3000);
 }
