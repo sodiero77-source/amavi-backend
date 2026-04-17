@@ -1,6 +1,7 @@
 export interface RequestActorContext {
-  actorId: string;
-  actorRole: 'ADMIN' | 'SUPERVISOR' | 'CLINICIAN' | 'MEDTECH' | 'STAFF';
-  facilityId: string;
-  requestId: string;
+  actor: {
+    actor_id: string;
+    facility_id: string;
+    role: string;
+  };
 }
