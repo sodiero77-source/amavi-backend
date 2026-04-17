@@ -4,7 +4,7 @@ import {
   CreateTreatmentPlanDto,
   ListTreatmentPlansQueryDto,
 } from './dto';
-import { RequestWithActorContext } from '../../common/auth/request-context.interface';
+import { RequestActorContext } from '../../common/auth/request-context.interface';
 
 @Controller('/api/treatment-plans')
 export class TreatmentPlansController {
@@ -14,7 +14,7 @@ export class TreatmentPlansController {
 
   @Post()
   create(
-    @Req() req: RequestWithActorContext,
+    @Req() req: RequestActorContext,
     @Body() dto: CreateTreatmentPlanDto,
   ) {
     return this.treatmentPlansService.create(req.actor, dto);
@@ -22,7 +22,7 @@ export class TreatmentPlansController {
 
   @Get()
   list(
-    @Req() req: RequestWithActorContext,
+    @Req() req: RequestActorContext,
     @Query() query: ListTreatmentPlansQueryDto,
   ) {
     return this.treatmentPlansService.list(req.actor, query);
