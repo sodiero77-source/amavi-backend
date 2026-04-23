@@ -17,7 +17,7 @@ export class TreatmentPlansController {
     @Req() req: RequestActorContext,
     @Body() dto: CreateTreatmentPlanDto,
   ) {
-    return this.treatmentPlansService.create(req.actor, dto);
+    return this.treatmentPlansService.create(req, dto);
   }
 
   @Get()
@@ -25,6 +25,6 @@ export class TreatmentPlansController {
     @Req() req: RequestActorContext,
     @Query() query: ListTreatmentPlansQueryDto,
   ) {
-    return this.treatmentPlansService.list(req.actor, query);
+    return this.treatmentPlansService.list(req, query);
   }
 }
