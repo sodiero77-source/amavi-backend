@@ -1,7 +1,6 @@
 export interface RequestActorContext {
-  actor: {
-    actorId: string;
-    role: string;
-  };
+  actorId: string;
+  actorRole: string;
   facilityId: string;
+  requestId: string;
 }
