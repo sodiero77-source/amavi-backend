@@ -6,6 +6,7 @@ import { RequestActorContext } from '../auth/request-context.interface';
 export class RequestContextGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest();
+
     const actorId = request.header('x-actor-id');
     const actorRole = request.header('x-actor-role');
     const facilityId = request.header('x-facility-id');
@@ -17,15 +18,14 @@ export class RequestContextGuard implements CanActivate {
     }
 
     const actorContext: RequestActorContext = {
-      actor: {
-        actorId,
-        role: actorRole,
-      },
+      actorId,
+      actorRole,
       facilityId,
       requestId: request.header('x-request-id') ?? randomUUID(),
     };
 
     request.actorContext = actorContext;
+
     return true;
   }
 }
