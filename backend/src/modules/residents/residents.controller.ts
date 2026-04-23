@@ -1,25 +1,24 @@
-import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards } from '@nestjs/common';
+import { GetActorContext } from '../../common/auth/get-actor-context.decorator';
+import { RequestActorContext } from '../../common/auth/request-context.interface';
 import { RequestContextGuard } from '../../common/guards/request-context.guard';
-import { CreateResidentDto } from './dto';
-import { ResidentsService } from './residents.service';
 
 @Controller('residents')
 @UseGuards(RequestContextGuard)
 export class ResidentsController {
-  constructor(private readonly residentsService: ResidentsService) {}
 
   @Post()
-  create(@Req() request: any, @Body() dto: CreateResidentDto) {
-    return this.residentsService.create(request.actorContext, dto);
-  }
+  createResident(
+    @Body() dto: any,
+    @GetActorContext() context: RequestActorContext,
+  ) {
+    console.log('DTO:', dto);
+    console.log('Context:', context);
 
-  @Get()
-  list(@Req() request: any) {
-    return this.residentsService.list(request.actorContext.facilityId);
-  }
-
-  @Get(':residentId')
-  getOne(@Req() request: any, @Param('residentId') residentId: string) {
-    return this.residentsService.getOne(request.actorContext.facilityId, residentId);
+    return {
+      message: 'CreateResident endpoint hit',
+      dto,
+      context,
+    };
   }
 }
