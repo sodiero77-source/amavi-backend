@@ -17,8 +17,10 @@ export class RequestContextGuard implements CanActivate {
     }
 
     const actorContext: RequestActorContext = {
-      actorId,
-      actorRole,
+      actor: {
+        actorId,
+        role: actorRole,
+      },
       facilityId,
       requestId: request.header('x-request-id') ?? randomUUID(),
     };
