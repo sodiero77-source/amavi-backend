@@ -11,7 +11,7 @@ type RequestWithActorContext = Request & {
   actorContext: RequestActorContext;
 };
 
-@Controller('/api/treatment-plans')
+@Controller('treatment-plans')
 export class TreatmentPlansController {
   constructor(
     private readonly treatmentPlansService: TreatmentPlansService,
