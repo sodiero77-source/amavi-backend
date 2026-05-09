@@ -1,7 +1,8 @@
-import { IsNotEmpty, IsString } from 'class-validator';
+import { IsNotEmpty, IsString, IsUUID, IsEnum } from 'class-validator';
+import { ProgressIndicator } from '@prisma/client';
 
 export class CreateClinicalNoteDto {
-  @IsString()
+  @IsUUID()
   @IsNotEmpty()
   residentId!: string;
 
@@ -13,15 +14,11 @@ export class CreateClinicalNoteDto {
   @IsNotEmpty()
   content!: string;
 
-  @IsString()
+  @IsUUID()
   @IsNotEmpty()
-  problem!: string;
+  objectiveId!: string;
 
-  @IsString()
+  @IsEnum(ProgressIndicator)
   @IsNotEmpty()
-  goal!: string;
-
-  @IsString()
-  @IsNotEmpty()
-  objective!: string;
+  progressIndicator!: ProgressIndicator;
 }
