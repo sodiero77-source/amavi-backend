@@ -7,6 +7,118 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model Facility {
+  id        String     @id @default(cuid())
+  name      String
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  residents Resident[]
+  users     User[]
+  treatmentPlansV2 TreatmentPlanV2[]
+}
+
+model User {
+  id         String   @id @default(cuid())
+  facilityId String
+  email      String   @unique
+  fullName   String
+  role       UserRole
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  facility   Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+}
+
+model Resident {
+  id               String            @id @default(cuid())
+  facilityId       String
+  firstName        String
+  lastName         String
+  dateOfBirth      DateTime
+  admissionDate    DateTime
+  status           ResidentStatus    @default(ACTIVE)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  clinicalNotes    ClinicalNote[]
+  complianceAlerts ComplianceAlert[]
+  medicationOrders MedicationOrder[]
+  facility         Facility          @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  tasks            Task[]
+  treatmentPlansV2 TreatmentPlanV2[]
+}
+
+model ClinicalNote {
+  id          String     @id @default(cuid())
+  facilityId  String
+  residentId  String
+  title       String
+  content     String
+  problem     String
+  goal        String
+  objective   String
+  status      NoteStatus @default(DRAFT)
+  createdById String
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  resident    Resident   @relation(fields: [residentId], references: [id], onDelete: Cascade)
+  treatmentPlanLinks ClinicalNoteTreatmentPlanLink[]
+  signature          ClinicalNoteSignature?
+}
+
+model MedicationOrder {
+  id             String                @id @default(cuid())
+  facilityId     String
+  residentId     String
+  medicationName String
+  dose           String
+  route          String
+  frequency      String
+  status         MedicationOrderStatus @default(DRAFT)
+  createdById    String
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  resident       Resident              @relation(fields: [residentId], references: [id], onDelete: Cascade)
+}
+
+model Task {
+  id         String     @id @default(cuid())
+  facilityId String
+  residentId String?
+  title      String
+  status     TaskStatus @default(OPEN)
+  dueAt      DateTime?
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  resident   Resident?  @relation(fields: [residentId], references: [id])
+}
+
+model ComplianceAlert {
+  id         String      @id @default(cuid())
+  facilityId String
+  residentId String?
+  title      String
+  detail     String
+  status     AlertStatus @default(OPEN)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  resident   Resident?   @relation(fields: [residentId], references: [id])
+}
+
+model TreatmentPlan {
+  id         String   @id @default(cuid())
+  facilityId String
+  residentId String
+  problem    String
+  goal       String
+  objective  String
+  createdBy  String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([facilityId])
+  @@index([residentId])
+  @@index([createdAt])
+}
+
 enum UserRole {
   ADMIN
   SUPERVISOR
@@ -43,111 +155,88 @@ enum AlertStatus {
   RESOLVED
 }
 
-model Facility {
-  id        String    @id @default(cuid())
-  name      String
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  users     User[]
-  residents Resident[]
+enum TreatmentPlanStatus {
+  DRAFT
+  ACTIVE
+  UNDER_REVIEW
+  CLOSED
 }
 
-model User {
-  id         String   @id @default(cuid())
-  facilityId String
-  email      String   @unique
-  fullName   String
-  role       UserRole
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  facility   Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+enum ObjectiveStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  MET
+  DISCONTINUED
 }
 
-model Resident {
-  id           String         @id @default(cuid())
-  facilityId   String
-  firstName    String
-  lastName     String
-  dateOfBirth  DateTime
-  admissionDate DateTime
-  status       ResidentStatus @default(ACTIVE)
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
-  facility     Facility       @relation(fields: [facilityId], references: [id], onDelete: Cascade)
-  clinicalNotes ClinicalNote[]
-  medicationOrders MedicationOrder[]
-  tasks        Task[]
-  complianceAlerts ComplianceAlert[]
+enum ProgressIndicator {
+  PROGRESSING
+  MAINTAINING
+  REGRESSING
+  NOT_ADDRESSED
 }
 
-model ClinicalNote {
-  id          String     @id @default(cuid())
+model TreatmentPlanV2 {
+  id          String              @id @default(cuid())
   facilityId  String
   residentId  String
-  title       String
-  content     String
-  problem     String
-  goal        String
-  objective   String
-  status      NoteStatus @default(DRAFT)
+  status      TreatmentPlanStatus @default(DRAFT)
   createdById String
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-  resident    Resident   @relation(fields: [residentId], references: [id], onDelete: Cascade)
-}
-
-model MedicationOrder {
-  id          String                @id @default(cuid())
-  facilityId  String
-  residentId  String
-  medicationName String
-  dose        String
-  route       String
-  frequency   String
-  status      MedicationOrderStatus @default(DRAFT)
-  createdById String
-  createdAt   DateTime              @default(now())
-  updatedAt   DateTime              @updatedAt
-  resident    Resident              @relation(fields: [residentId], references: [id], onDelete: Cascade)
-}
-
-model Task {
-  id          String     @id @default(cuid())
-  facilityId  String
-  residentId  String?
-  title       String
-  status      TaskStatus @default(OPEN)
-  dueAt       DateTime?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-  resident    Resident?  @relation(fields: [residentId], references: [id], onDelete: SetNull)
-}
-
-model ComplianceAlert {
-  id          String      @id @default(cuid())
-  facilityId  String
-  residentId  String?
-  title       String
-  detail      String
-  status      AlertStatus @default(OPEN)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  resident    Resident?   @relation(fields: [residentId], references: [id], onDelete: SetNull)
-}
-model TreatmentPlan {
-  id         String   @id @default(cuid())
-  facilityId String
-  residentId String
-  problem    String
-  goal       String
-  objective  String
-  createdBy  String
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
- 
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  facility    Facility            @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  resident    Resident            @relation(fields: [residentId], references: [id], onDelete: Cascade)
+  problems    TreatmentPlanProblem[]
 
   @@index([facilityId])
   @@index([residentId])
-  @@index([createdAt])
+}
+
+model TreatmentPlanProblem {
+  id              String           @id @default(cuid())
+  treatmentPlanId String
+  description     String
+  createdAt       DateTime         @default(now())
+  treatmentPlan   TreatmentPlanV2  @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
+  goals           TreatmentPlanGoal[]
+}
+
+model TreatmentPlanGoal {
+  id          String               @id @default(cuid())
+  problemId   String
+  description String
+  createdAt   DateTime             @default(now())
+  problem     TreatmentPlanProblem @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  objectives  TreatmentPlanObjective[]
+}
+
+model TreatmentPlanObjective {
+  id          String            @id @default(cuid())
+  goalId      String
+  description String
+  status      ObjectiveStatus   @default(NOT_STARTED)
+  targetDate  DateTime?
+  createdAt   DateTime          @default(now())
+  goal        TreatmentPlanGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  noteLinks   ClinicalNoteTreatmentPlanLink[]
+}
+
+model ClinicalNoteTreatmentPlanLink {
+  id                String                 @id @default(cuid())
+  noteId            String
+  objectiveId       String
+  progressIndicator ProgressIndicator
+  createdAt         DateTime               @default(now())
+  note              ClinicalNote           @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  objective         TreatmentPlanObjective @relation(fields: [objectiveId], references: [id])
+
+  @@unique([noteId, objectiveId])
+}
+
+model ClinicalNoteSignature {
+  id         String       @id @default(cuid())
+  noteId     String       @unique
+  signedById String
+  signedAt   DateTime     @default(now())
+  note       ClinicalNote @relation(fields: [noteId], references: [id], onDelete: Cascade)
 }
