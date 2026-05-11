@@ -1,6 +1,7 @@
 import {
   Injectable,
   NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../../common/db/prisma.service';
 import { EventBusService } from '../../common/events/event-bus.service';
@@ -27,21 +28,20 @@ export class ClinicalNotesService {
     }
 
     // 2. Validate objective traces back to active treatment plan
-    // scoped to this exact resident and facility — full chain enforced
     const objective = await this.prisma.treatmentPlanObjective.findFirst({
       where: {
-  id: dto.objectiveId,
-  status: { in: ['NOT_STARTED', 'IN_PROGRESS'] },
-  goal: {
-    problem: {
-      treatmentPlan: {
-        residentId: dto.residentId,
-        facilityId: actor.facilityId,
-        status: 'ACTIVE',
+        id: dto.objectiveId,
+        status: { in: ['NOT_STARTED', 'IN_PROGRESS'] },
+        goal: {
+          problem: {
+            treatmentPlan: {
+              residentId: dto.residentId,
+              facilityId: actor.facilityId,
+              status: 'ACTIVE',
+            },
+          },
+        },
       },
-    },
-  },
-},
     });
     if (!objective) {
       throw new NotFoundException(
@@ -57,11 +57,16 @@ export class ClinicalNotesService {
           residentId: dto.residentId,
           title: dto.title,
           content: dto.content,
-          problem: '',
-          goal: '',
-          objective: '',
           status: 'DRAFT',
           createdById: actor.actorId,
+        },
+        include: {
+          treatmentPlanLinks: {
+            include: {
+              objective: true,
+            },
+          },
+          signature: true,
         },
       });
 
@@ -73,15 +78,34 @@ export class ClinicalNotesService {
         },
       });
 
-      return note;
+      // Return note with links included
+      return tx.clinicalNote.findUnique({
+        where: { id: note.id },
+        include: {
+          treatmentPlanLinks: {
+            include: {
+              objective: {
+                include: {
+                  goal: {
+                    include: {
+                      problem: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+          signature: true,
+        },
+      });
     });
 
-    // 4. Publish event after successful commit
+    // 4. Publish event
     this.eventBus.publish({
       name: 'ClinicalNoteCreated',
       occurredAt: new Date().toISOString(),
       payload: {
-        noteId: result.id,
+        noteId: result!.id,
         residentId: dto.residentId,
         objectiveId: dto.objectiveId,
         actorId: actor.actorId,
@@ -112,5 +136,52 @@ export class ClinicalNotesService {
       },
       orderBy: { createdAt: 'desc' },
     });
+  }  
+async sign(actor: RequestActorContext, noteId: string) {
+    const note = await this.prisma.clinicalNote.findFirst({
+      where: { id: noteId, facilityId: actor.facilityId },
+      include: {
+        treatmentPlanLinks: {
+          include: {
+            objective: {
+              include: {
+                goal: { include: { problem: { include: { treatmentPlan: true } } } }
+              },
+            },
+          },
+        },
+        signature: true,
+      },
+    });
+    if (!note) throw new NotFoundException('Clinical note not found in this facility');
+    if (note.status !== 'DRAFT') throw new BadRequestException(`Note cannot be signed — current status is ${note.status}`);
+    if (!note.treatmentPlanLinks || note.treatmentPlanLinks.length === 0) throw new BadRequestException('Note cannot be signed — no treatment plan linkage found');
+    const link = note.treatmentPlanLinks[0];
+    const treatmentPlan = link.objective.goal.problem.treatmentPlan;
+    if (treatmentPlan.status !== 'ACTIVE') throw new BadRequestException('Note cannot be signed — linked treatment plan is no longer active');
+    if (treatmentPlan.residentId !== note.residentId) throw new BadRequestException('Note cannot be signed — treatment plan resident mismatch');
+    if (treatmentPlan.facilityId !== actor.facilityId) throw new BadRequestException('Note cannot be signed — cross-facility signing not permitted');
+    if (note.signature) throw new BadRequestException('Note has already been signed');
+    const result = await this.prisma.$transaction(async (tx) => {
+      await tx.clinicalNote.update({ where: { id: noteId }, data: { status: 'SIGNED' } });
+      await tx.clinicalNoteSignature.create({ data: { noteId, signedById: actor.actorId } });
+      await tx.treatmentPlanObjective.updateMany({
+        where: { id: link.objectiveId, status: 'NOT_STARTED' },
+        data: { status: 'IN_PROGRESS' },
+      });
+      return tx.clinicalNote.findUnique({
+        where: { id: noteId },
+        include: {
+          treatmentPlanLinks: { include: { objective: true } },
+          signature: true,
+        },
+      });
+    });
+    this.eventBus.publish({
+      name: 'ClinicalNoteSigned',
+      occurredAt: new Date().toISOString(),
+      payload: { noteId, residentId: note.residentId, signedById: actor.actorId, objectiveId: link.objectiveId },
+    });
+    return result;
   }
 }

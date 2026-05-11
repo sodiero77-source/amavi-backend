@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
 import { RequestContextGuard } from '../../common/guards/request-context.guard';
 import { ClinicalNotesService } from './clinical-notes.service';
 import { CreateClinicalNoteDto } from './dto';
@@ -11,6 +11,11 @@ export class ClinicalNotesController {
   @Post()
   create(@Req() request: any, @Body() dto: CreateClinicalNoteDto) {
     return this.clinicalNotesService.create(request.actorContext, dto);
+  }
+
+  @Post(':id/sign')
+  sign(@Req() request: any, @Param('id') id: string) {
+    return this.clinicalNotesService.sign(request.actorContext, id);
   }
 
   @Get()
