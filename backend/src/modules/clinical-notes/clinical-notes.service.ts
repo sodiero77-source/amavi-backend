@@ -30,17 +30,18 @@ export class ClinicalNotesService {
     // scoped to this exact resident and facility — full chain enforced
     const objective = await this.prisma.treatmentPlanObjective.findFirst({
       where: {
-        id: dto.objectiveId,
-        goal: {
-          problem: {
-            treatmentPlan: {
-              residentId: dto.residentId,
-              facilityId: actor.facilityId,
-              status: 'ACTIVE',
-            },
-          },
-        },
+  id: dto.objectiveId,
+  status: { in: ['NOT_STARTED', 'IN_PROGRESS'] },
+  goal: {
+    problem: {
+      treatmentPlan: {
+        residentId: dto.residentId,
+        facilityId: actor.facilityId,
+        status: 'ACTIVE',
       },
+    },
+  },
+},
     });
     if (!objective) {
       throw new NotFoundException(
