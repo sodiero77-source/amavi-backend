@@ -6,7 +6,7 @@ import {
 import { PrismaService } from '../../common/db/prisma.service';
 import { EventBusService } from '../../common/events/event-bus.service';
 import { RequestActorContext } from '../../common/auth/request-context.interface';
-import { CreateClinicalNoteDto } from './dto';
+import { CreateClinicalNoteDto, UpdateClinicalNoteDto } from './dto';
 
 @Injectable()
 export class ClinicalNotesService {
@@ -183,5 +183,43 @@ async sign(actor: RequestActorContext, noteId: string) {
       payload: { noteId, residentId: note.residentId, signedById: actor.actorId, objectiveId: link.objectiveId },
     });
     return result;
+  }
+async update(actor: RequestActorContext, noteId: string, dto: UpdateClinicalNoteDto) {
+    const note = await this.prisma.clinicalNote.findFirst({
+      where: { id: noteId, facilityId: actor.facilityId },
+    });
+    if (!note) {
+      throw new NotFoundException('Clinical note not found in this facility');
+    }
+    if (note.status === 'SIGNED') {
+      throw new BadRequestException('SIGNED clinical notes cannot be edited');
+    }
+    return this.prisma.clinicalNote.update({
+      where: { id: noteId },
+      data: {
+        ...(dto.title && { title: dto.title }),
+        ...(dto.content && { content: dto.content }),
+      },
+      include: {
+        treatmentPlanLinks: { include: { objective: true } },
+        signature: true,
+      },
+    });
+  }
+
+  async remove(actor: RequestActorContext, noteId: string) {
+    const note = await this.prisma.clinicalNote.findFirst({
+      where: { id: noteId, facilityId: actor.facilityId },
+    });
+    if (!note) {
+      throw new NotFoundException('Clinical note not found in this facility');
+    }
+    if (note.status === 'SIGNED') {
+      throw new BadRequestException('SIGNED clinical notes cannot be deleted');
+    }
+    await this.prisma.clinicalNote.delete({
+      where: { id: noteId },
+    });
+    return { message: 'Clinical note deleted successfully' };
   }
 }
