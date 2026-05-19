@@ -19,7 +19,7 @@ import {
 import { ResidentsService } from "./residents.service";
 
 @Controller("residents")
-@UseGuards(JwtAuthGuard)
+// @UseGuards(JwtAuthGuard)
 export class ResidentsController {
   constructor(private readonly residentsService: ResidentsService) {}
 
