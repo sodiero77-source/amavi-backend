@@ -18,6 +18,66 @@ interface TreatmentPlanTrace {
   objectiveDescription: string;
 }
 
+interface CalendarObjectiveCandidate {
+  treatmentPlanId: string;
+  problemId: string;
+  problemDescription: string;
+  goalId: string;
+  goalDescription: string;
+  objectiveId: string;
+  objectiveDescription: string;
+  objectiveStatus: string;
+}
+
+interface CalendarTopicTemplate {
+  key: string;
+  label: string;
+  interventionCategory: string;
+}
+
+const WEEKLY_TOPIC_ROTATION: CalendarTopicTemplate[] = [
+  {
+    key: 'psychoeducation',
+    label: 'Psychoeducation',
+    interventionCategory: 'Psychoeducation',
+  },
+  {
+    key: 'coping_skills',
+    label: 'Coping skills',
+    interventionCategory: 'Skill building',
+  },
+  {
+    key: 'relapse_prevention',
+    label: 'Relapse prevention',
+    interventionCategory: 'Relapse prevention',
+  },
+  {
+    key: 'medication_adherence',
+    label: 'Medication adherence',
+    interventionCategory: 'Medication adherence',
+  },
+  {
+    key: 'emotional_regulation',
+    label: 'Emotional regulation',
+    interventionCategory: 'CBT intervention',
+  },
+  {
+    key: 'community_integration',
+    label: 'Community integration',
+    interventionCategory: 'Community integration',
+  },
+  {
+    key: 'crisis_planning',
+    label: 'Crisis planning',
+    interventionCategory: 'Safety planning',
+  },
+  {
+    key: 'discharge_readiness',
+    label: 'Discharge readiness',
+    interventionCategory: 'Discharge planning',
+  },
+];
+
 const DEFAULT_PRINT_SETTINGS = {
   facilityLegalName: null,
   dbaName: null,
@@ -116,12 +176,13 @@ export class AmaviAssistService {
   }
 
   async getCalendar(actor: RequestActorContext, residentId: string) {
-    await this.ensureResidentInFacility(actor.facilityId, residentId);
+    await this.ensureMonthlyCalendar(actor, residentId);
 
     return this.prisma.treatmentCalendarSession.findMany({
       where: {
         facilityId: actor.facilityId,
         residentId,
+        calendarMonth: this.getCalendarMonth(new Date()),
       },
       include: {
         problem: true,
@@ -305,6 +366,362 @@ export class AmaviAssistService {
     if (!resident) {
       throw new NotFoundException('Resident not found in this facility');
     }
+  }
+
+  private async ensureMonthlyCalendar(
+    actor: RequestActorContext,
+    residentId: string,
+  ): Promise<void> {
+    const calendarMonth = this.getCalendarMonth(new Date());
+    const existingCount = await this.prisma.treatmentCalendarSession.count({
+      where: {
+        facilityId: actor.facilityId,
+        residentId,
+        calendarMonth,
+      },
+    });
+
+    if (existingCount > 0) {
+      return;
+    }
+
+    const resident = await this.prisma.resident.findFirst({
+      where: {
+        id: residentId,
+        facilityId: actor.facilityId,
+        status: 'ACTIVE',
+      },
+      include: {
+        treatmentPlansV2: {
+          where: { status: 'ACTIVE' },
+          include: {
+            problems: {
+              include: {
+                goals: {
+                  include: {
+                    objectives: true,
+                  },
+                },
+              },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+        treatmentCalendarSessions: {
+          orderBy: { scheduledFor: 'desc' },
+          take: 16,
+        },
+      },
+    });
+
+    if (!resident) {
+      throw new NotFoundException('Active resident not found in this facility');
+    }
+
+    const candidates = this.getCalendarObjectiveCandidates(
+      resident.treatmentPlansV2,
+    );
+    if (candidates.length === 0) {
+      throw new BadRequestException(
+        'No active treatment plan objectives are available for calendar generation',
+      );
+    }
+
+    const sessionCount = this.resolveMonthlySessionCount(
+      resident.levelOfCare,
+      resident.serviceFrequency,
+    );
+    const priorTopicKeys = new Set(
+      resident.treatmentCalendarSessions
+        .map((session) => session.topicRotationKey)
+        .filter((key): key is string => Boolean(key)),
+    );
+    const scheduleDates = this.getMonthlyScheduleDates(
+      new Date(),
+      sessionCount,
+    );
+    const diagnosisProfile = this.getDiagnosisProfile(
+      resident.primaryDiagnosis,
+      resident.secondaryDiagnoses,
+    );
+
+    const sessions = scheduleDates.map((scheduledFor, index) => {
+      const objective = candidates[index % candidates.length];
+      const topic = this.selectTopicTemplate(
+        diagnosisProfile,
+        priorTopicKeys,
+        index,
+      );
+      priorTopicKeys.add(topic.key);
+      const expectedProgressFocus = this.getExpectedProgressFocus(
+        objective.objectiveStatus,
+        resident.levelOfCare,
+        index,
+        sessionCount,
+      );
+
+      return {
+        facilityId: actor.facilityId,
+        residentId,
+        treatmentPlanId: objective.treatmentPlanId,
+        problemId: objective.problemId,
+        goalId: objective.goalId,
+        objectiveId: objective.objectiveId,
+        serviceType: this.resolveServiceType(resident.levelOfCare),
+        sessionTopic: this.buildSessionTopic(topic, objective, diagnosisProfile),
+        interventionCategory: topic.interventionCategory,
+        expectedProgressFocus,
+        suggestedPrompt: this.buildSuggestedPrompt(
+          topic,
+          objective,
+          expectedProgressFocus,
+        ),
+        progressionRationale: this.buildProgressionRationale(
+          objective,
+          resident.levelOfCare,
+          resident.serviceFrequency,
+          index,
+          sessionCount,
+        ),
+        diagnosisRationale: {
+          primaryDiagnosis: resident.primaryDiagnosis ?? null,
+          secondaryDiagnoses: resident.secondaryDiagnoses,
+          matchedFocus: diagnosisProfile.focus,
+          complianceNote:
+            'Suggested topic only; clinician must verify medical necessity and document actual presentation.',
+        },
+        topicRotationKey: topic.key,
+        calendarMonth,
+        scheduledFor,
+        createdById: actor.actorId,
+      };
+    });
+
+    await this.prisma.treatmentCalendarSession.createMany({
+      data: sessions,
+    });
+  }
+
+  private getCalendarObjectiveCandidates(
+    treatmentPlans: Array<{
+      id: string;
+      problems: Array<{
+        id: string;
+        description: string;
+        goals: Array<{
+          id: string;
+          description: string;
+          objectives: Array<{
+            id: string;
+            description: string;
+            status: string;
+          }>;
+        }>;
+      }>;
+    }>,
+  ): CalendarObjectiveCandidate[] {
+    return treatmentPlans.flatMap((plan) =>
+      plan.problems.flatMap((problem) =>
+        problem.goals.flatMap((goal) =>
+          goal.objectives
+            .filter((objective) =>
+              ['NOT_STARTED', 'IN_PROGRESS'].includes(objective.status),
+            )
+            .map((objective) => ({
+              treatmentPlanId: plan.id,
+              problemId: problem.id,
+              problemDescription: problem.description,
+              goalId: goal.id,
+              goalDescription: goal.description,
+              objectiveId: objective.id,
+              objectiveDescription: objective.description,
+              objectiveStatus: objective.status,
+            })),
+        ),
+      ),
+    );
+  }
+
+  private getCalendarMonth(date: Date): string {
+    return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+  }
+
+  private resolveMonthlySessionCount(
+    levelOfCare?: string | null,
+    serviceFrequency?: string | null,
+  ): number {
+    const source = `${levelOfCare ?? ''} ${serviceFrequency ?? ''}`.toLowerCase();
+
+    if (source.includes('daily') || source.includes('php')) return 20;
+    if (source.includes('iop') || source.includes('intensive')) return 12;
+    if (source.includes('residential')) return 8;
+    if (source.includes('biweekly') || source.includes('twice monthly')) return 2;
+    if (source.includes('monthly')) return 1;
+    if (source.includes('2x') || source.includes('twice weekly')) return 8;
+    if (source.includes('3x')) return 12;
+
+    return 4;
+  }
+
+  private getMonthlyScheduleDates(anchor: Date, sessionCount: number): Date[] {
+    const year = anchor.getUTCFullYear();
+    const month = anchor.getUTCMonth();
+    const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+    const interval = Math.max(1, Math.floor(daysInMonth / sessionCount));
+
+    return Array.from({ length: sessionCount }, (_, index) => {
+      const day = Math.min(daysInMonth, 1 + index * interval);
+      return new Date(Date.UTC(year, month, day, 17, 0, 0));
+    });
+  }
+
+  private getDiagnosisProfile(
+    primaryDiagnosis?: string | null,
+    secondaryDiagnoses: string[] = [],
+  ) {
+    const diagnoses = [primaryDiagnosis, ...secondaryDiagnoses]
+      .filter((diagnosis): diagnosis is string => Boolean(diagnosis))
+      .join(' ')
+      .toLowerCase();
+
+    if (diagnoses.match(/substance|alcohol|opioid|stimulant|cannabis|use disorder/)) {
+      return {
+        focus: 'substance use recovery',
+        preferredTopics: [
+          'relapse_prevention',
+          'coping_skills',
+          'crisis_planning',
+          'community_integration',
+        ],
+      };
+    }
+
+    if (diagnoses.match(/depress|bipolar|mood/)) {
+      return {
+        focus: 'mood stabilization',
+        preferredTopics: [
+          'emotional_regulation',
+          'medication_adherence',
+          'coping_skills',
+          'crisis_planning',
+        ],
+      };
+    }
+
+    if (diagnoses.match(/anxiety|panic|trauma|ptsd/)) {
+      return {
+        focus: 'anxiety and trauma symptom management',
+        preferredTopics: [
+          'coping_skills',
+          'emotional_regulation',
+          'psychoeducation',
+          'crisis_planning',
+        ],
+      };
+    }
+
+    if (diagnoses.match(/psychosis|schizo/)) {
+      return {
+        focus: 'thought-disorder stabilization',
+        preferredTopics: [
+          'medication_adherence',
+          'psychoeducation',
+          'community_integration',
+          'crisis_planning',
+        ],
+      };
+    }
+
+    return {
+      focus: 'behavioral health stabilization',
+      preferredTopics: WEEKLY_TOPIC_ROTATION.map((topic) => topic.key),
+    };
+  }
+
+  private selectTopicTemplate(
+    diagnosisProfile: { preferredTopics: string[] },
+    priorTopicKeys: Set<string>,
+    index: number,
+  ): CalendarTopicTemplate {
+    const preferred = diagnosisProfile.preferredTopics
+      .map((key) => WEEKLY_TOPIC_ROTATION.find((topic) => topic.key === key))
+      .filter((topic): topic is CalendarTopicTemplate => Boolean(topic));
+    const rotation = [...preferred, ...WEEKLY_TOPIC_ROTATION].filter(
+      (topic, topicIndex, topics) =>
+        topics.findIndex((candidate) => candidate.key === topic.key) ===
+        topicIndex,
+    );
+
+    return (
+      rotation.find((topic) => !priorTopicKeys.has(topic.key)) ??
+      rotation[index % rotation.length]
+    );
+  }
+
+  private getExpectedProgressFocus(
+    objectiveStatus: string,
+    levelOfCare: string | null | undefined,
+    index: number,
+    sessionCount: number,
+  ): string {
+    if (index === sessionCount - 1) {
+      return 'Review measurable gains, continuing barriers, and next clinically appropriate step.';
+    }
+
+    if (objectiveStatus === 'NOT_STARTED') {
+      return 'Establish baseline, orient resident to objective, and introduce initial skill practice.';
+    }
+
+    if ((levelOfCare ?? '').toLowerCase().includes('residential')) {
+      return 'Support structured practice, symptom stabilization, and transfer of skills across milieu settings.';
+    }
+
+    return 'Assess objective-linked progress, reinforce skill use, and document barriers without inferring unobserved symptoms.';
+  }
+
+  private resolveServiceType(levelOfCare?: string | null): string {
+    const loc = (levelOfCare ?? '').toLowerCase();
+    if (loc.includes('group')) return 'Group Therapy';
+    if (loc.includes('family')) return 'Family Therapy';
+    return 'Individual Therapy';
+  }
+
+  private buildSessionTopic(
+    topic: CalendarTopicTemplate,
+    objective: CalendarObjectiveCandidate,
+    diagnosisProfile: { focus: string },
+  ): string {
+    return `${topic.label} for ${diagnosisProfile.focus}: ${objective.objectiveDescription}`;
+  }
+
+  private buildSuggestedPrompt(
+    topic: CalendarTopicTemplate,
+    objective: CalendarObjectiveCandidate,
+    expectedProgressFocus: string,
+  ): string {
+    return [
+      `Draft only from clinician-confirmed session details for ${topic.label.toLowerCase()}.`,
+      `Map content to objective: ${objective.objectiveDescription}.`,
+      `Expected progress focus: ${expectedProgressFocus}`,
+      'Do not invent symptoms, diagnoses, medications, incidents, attendance, engagement, or response details.',
+    ].join(' ');
+  }
+
+  private buildProgressionRationale(
+    objective: CalendarObjectiveCandidate,
+    levelOfCare: string | null | undefined,
+    serviceFrequency: string | null | undefined,
+    index: number,
+    sessionCount: number,
+  ): string {
+    const phase =
+      index === 0
+        ? 'baseline and engagement'
+        : index === sessionCount - 1
+          ? 'review and transition planning'
+          : 'skill practice and measurable progress monitoring';
+
+    return `Payer-defensible sequence uses ${phase} for objective "${objective.objectiveDescription}" at LOC "${levelOfCare ?? 'not specified'}" with frequency "${serviceFrequency ?? 'weekly/default'}"; each session requires clinician-confirmed response and medical necessity documentation.`;
   }
 
   private async ensureFacilityExists(facilityId: string): Promise<void> {

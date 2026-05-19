@@ -40,6 +40,10 @@ model Resident {
   lastName                     String
   dateOfBirth                  DateTime
   admissionDate                DateTime
+  primaryDiagnosis             String?
+  secondaryDiagnoses           String[]                      @default([])
+  levelOfCare                  String?
+  serviceFrequency             String?
   status                       ResidentStatus                @default(ACTIVE)
   createdAt                    DateTime                      @default(now())
   updatedAt                    DateTime                      @updatedAt
@@ -255,26 +259,33 @@ model ClinicalNoteSignature {
 }
 
 model TreatmentCalendarSession {
-  id              String                        @id @default(cuid())
-  facilityId      String
-  residentId      String
-  treatmentPlanId String
-  problemId       String
-  goalId          String
-  objectiveId     String
-  serviceType     String
-  sessionTopic    String
-  scheduledFor    DateTime
-  createdById     String
-  createdAt       DateTime                      @default(now())
-  updatedAt       DateTime                      @updatedAt
-  facility        Facility                      @relation(fields: [facilityId], references: [id], onDelete: Cascade)
-  resident        Resident                      @relation(fields: [residentId], references: [id], onDelete: Cascade)
-  treatmentPlan   TreatmentPlanV2               @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
-  problem         TreatmentPlanProblem          @relation(fields: [problemId], references: [id])
-  goal            TreatmentPlanGoal             @relation(fields: [goalId], references: [id])
-  objective       TreatmentPlanObjective        @relation(fields: [objectiveId], references: [id])
-  generations     ClinicalNoteDraftGeneration[]
+  id                    String                        @id @default(cuid())
+  facilityId            String
+  residentId            String
+  treatmentPlanId       String
+  problemId             String
+  goalId                String
+  objectiveId           String
+  serviceType           String
+  sessionTopic          String
+  interventionCategory  String?
+  expectedProgressFocus String?
+  suggestedPrompt       String?
+  progressionRationale  String?
+  diagnosisRationale    Json?
+  topicRotationKey      String?
+  calendarMonth         String?
+  scheduledFor          DateTime
+  createdById           String
+  createdAt             DateTime                      @default(now())
+  updatedAt             DateTime                      @updatedAt
+  facility              Facility                      @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  resident              Resident                      @relation(fields: [residentId], references: [id], onDelete: Cascade)
+  treatmentPlan         TreatmentPlanV2               @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
+  problem               TreatmentPlanProblem          @relation(fields: [problemId], references: [id])
+  goal                  TreatmentPlanGoal             @relation(fields: [goalId], references: [id])
+  objective             TreatmentPlanObjective        @relation(fields: [objectiveId], references: [id])
+  generations           ClinicalNoteDraftGeneration[]
 
   @@index([facilityId, residentId, scheduledFor])
   @@index([treatmentPlanId])
