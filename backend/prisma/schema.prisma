@@ -8,19 +8,24 @@ datasource db {
 }
 
 model Facility {
-  id        String     @id @default(cuid())
-  name      String
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  residents Resident[]
-  users     User[]
-  treatmentPlansV2 TreatmentPlanV2[]
+  id                           String                        @id @default(cuid())
+  name                         String
+  createdAt                    DateTime                      @default(now())
+  updatedAt                    DateTime                      @updatedAt
+  residents                    Resident[]
+  users                        User[]
+  treatmentPlansV2             TreatmentPlanV2[]
+  treatmentCalendarSessions    TreatmentCalendarSession[]
+  clinicalNoteDraftGenerations ClinicalNoteDraftGeneration[]
+  noteGenerationAuditLogs      NoteGenerationAuditLog[]
+  printSettings                FacilityPrintSettings?
 }
 
 model User {
   id         String   @id @default(cuid())
   facilityId String
   email      String   @unique
+  password   String
   fullName   String
   role       UserRole
   createdAt  DateTime @default(now())
@@ -29,34 +34,41 @@ model User {
 }
 
 model Resident {
-  id               String            @id @default(cuid())
-  facilityId       String
-  firstName        String
-  lastName         String
-  dateOfBirth      DateTime
-  admissionDate    DateTime
-  status           ResidentStatus    @default(ACTIVE)
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  clinicalNotes    ClinicalNote[]
-  complianceAlerts ComplianceAlert[]
-  medicationOrders MedicationOrder[]
-  facility         Facility          @relation(fields: [facilityId], references: [id], onDelete: Cascade)
-  tasks            Task[]
-  treatmentPlansV2 TreatmentPlanV2[]
+  id                           String                        @id @default(cuid())
+  facilityId                   String
+  firstName                    String
+  lastName                     String
+  dateOfBirth                  DateTime
+  admissionDate                DateTime
+  primaryDiagnosis             String?
+  secondaryDiagnoses           String[]                      @default([])
+  levelOfCare                  String?
+  serviceFrequency             String?
+  status                       ResidentStatus                @default(ACTIVE)
+  createdAt                    DateTime                      @default(now())
+  updatedAt                    DateTime                      @updatedAt
+  clinicalNotes                ClinicalNote[]
+  complianceAlerts             ComplianceAlert[]
+  medicationOrders             MedicationOrder[]
+  facility                     Facility                      @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  tasks                        Task[]
+  treatmentPlansV2             TreatmentPlanV2[]
+  treatmentCalendarSessions    TreatmentCalendarSession[]
+  clinicalNoteDraftGenerations ClinicalNoteDraftGeneration[]
+  noteGenerationAuditLogs      NoteGenerationAuditLog[]
 }
 
 model ClinicalNote {
-  id          String     @id @default(cuid())
-  facilityId  String
-  residentId  String
-  title       String
-  content     String
-  status      NoteStatus @default(DRAFT)
-  createdById String
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-  resident    Resident   @relation(fields: [residentId], references: [id], onDelete: Cascade)
+  id                 String                          @id @default(cuid())
+  facilityId         String
+  residentId         String
+  title              String
+  content            String
+  status             NoteStatus                      @default(DRAFT)
+  createdById        String
+  createdAt          DateTime                        @default(now())
+  updatedAt          DateTime                        @updatedAt
+  resident           Resident                        @relation(fields: [residentId], references: [id], onDelete: Cascade)
   treatmentPlanLinks ClinicalNoteTreatmentPlanLink[]
   signature          ClinicalNoteSignature?
 }
@@ -174,48 +186,56 @@ enum ProgressIndicator {
 }
 
 model TreatmentPlanV2 {
-  id          String              @id @default(cuid())
-  facilityId  String
-  residentId  String
-  status      TreatmentPlanStatus @default(DRAFT)
-  createdById String
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
-  facility    Facility            @relation(fields: [facilityId], references: [id], onDelete: Cascade)
-  resident    Resident            @relation(fields: [residentId], references: [id], onDelete: Cascade)
-  problems    TreatmentPlanProblem[]
+  id                           String                        @id @default(cuid())
+  facilityId                   String
+  residentId                   String
+  status                       TreatmentPlanStatus           @default(DRAFT)
+  createdById                  String
+  createdAt                    DateTime                      @default(now())
+  updatedAt                    DateTime                      @updatedAt
+  facility                     Facility                      @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  resident                     Resident                      @relation(fields: [residentId], references: [id], onDelete: Cascade)
+  problems                     TreatmentPlanProblem[]
+  treatmentCalendarSessions    TreatmentCalendarSession[]
+  clinicalNoteDraftGenerations ClinicalNoteDraftGeneration[]
 
   @@index([facilityId])
   @@index([residentId])
 }
 
 model TreatmentPlanProblem {
-  id              String           @id @default(cuid())
-  treatmentPlanId String
-  description     String
-  createdAt       DateTime         @default(now())
-  treatmentPlan   TreatmentPlanV2  @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
-  goals           TreatmentPlanGoal[]
+  id                           String                        @id @default(cuid())
+  treatmentPlanId              String
+  description                  String
+  createdAt                    DateTime                      @default(now())
+  treatmentPlan                TreatmentPlanV2               @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
+  goals                        TreatmentPlanGoal[]
+  treatmentCalendarSessions    TreatmentCalendarSession[]
+  clinicalNoteDraftGenerations ClinicalNoteDraftGeneration[]
 }
 
 model TreatmentPlanGoal {
-  id          String               @id @default(cuid())
-  problemId   String
-  description String
-  createdAt   DateTime             @default(now())
-  problem     TreatmentPlanProblem @relation(fields: [problemId], references: [id], onDelete: Cascade)
-  objectives  TreatmentPlanObjective[]
+  id                           String                        @id @default(cuid())
+  problemId                    String
+  description                  String
+  createdAt                    DateTime                      @default(now())
+  problem                      TreatmentPlanProblem          @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  objectives                   TreatmentPlanObjective[]
+  treatmentCalendarSessions    TreatmentCalendarSession[]
+  clinicalNoteDraftGenerations ClinicalNoteDraftGeneration[]
 }
 
 model TreatmentPlanObjective {
-  id          String            @id @default(cuid())
-  goalId      String
-  description String
-  status      ObjectiveStatus   @default(NOT_STARTED)
-  targetDate  DateTime?
-  createdAt   DateTime          @default(now())
-  goal        TreatmentPlanGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
-  noteLinks   ClinicalNoteTreatmentPlanLink[]
+  id                           String                          @id @default(cuid())
+  goalId                       String
+  description                  String
+  status                       ObjectiveStatus                 @default(NOT_STARTED)
+  targetDate                   DateTime?
+  createdAt                    DateTime                        @default(now())
+  goal                         TreatmentPlanGoal               @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  noteLinks                    ClinicalNoteTreatmentPlanLink[]
+  treatmentCalendarSessions    TreatmentCalendarSession[]
+  clinicalNoteDraftGenerations ClinicalNoteDraftGeneration[]
 }
 
 model ClinicalNoteTreatmentPlanLink {
@@ -236,4 +256,112 @@ model ClinicalNoteSignature {
   signedById String
   signedAt   DateTime     @default(now())
   note       ClinicalNote @relation(fields: [noteId], references: [id], onDelete: Cascade)
+}
+
+model TreatmentCalendarSession {
+  id                    String                        @id @default(cuid())
+  facilityId            String
+  residentId            String
+  treatmentPlanId       String
+  problemId             String
+  goalId                String
+  objectiveId           String
+  serviceType           String
+  sessionTopic          String
+  interventionCategory  String?
+  expectedProgressFocus String?
+  suggestedPrompt       String?
+  progressionRationale  String?
+  diagnosisRationale    Json?
+  topicRotationKey      String?
+  calendarMonth         String?
+  scheduledFor          DateTime
+  createdById           String
+  createdAt             DateTime                      @default(now())
+  updatedAt             DateTime                      @updatedAt
+  facility              Facility                      @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  resident              Resident                      @relation(fields: [residentId], references: [id], onDelete: Cascade)
+  treatmentPlan         TreatmentPlanV2               @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
+  problem               TreatmentPlanProblem          @relation(fields: [problemId], references: [id])
+  goal                  TreatmentPlanGoal             @relation(fields: [goalId], references: [id])
+  objective             TreatmentPlanObjective        @relation(fields: [objectiveId], references: [id])
+  generations           ClinicalNoteDraftGeneration[]
+
+  @@index([facilityId, residentId, scheduledFor])
+  @@index([treatmentPlanId])
+  @@index([problemId, goalId, objectiveId])
+}
+
+model ClinicalNoteDraftGeneration {
+  id                         String                    @id @default(cuid())
+  facilityId                 String
+  residentId                 String
+  treatmentPlanId            String
+  problemId                  String
+  goalId                     String
+  objectiveId                String
+  treatmentCalendarSessionId String?
+  serviceType                String
+  sessionTopic               String
+  staffId                    String
+  promptInput                Json
+  generatedOutput            Json
+  regenerationCount          Int                       @default(0)
+  reviewedById               String?
+  reviewedAt                 DateTime?
+  createdById                String
+  requestId                  String
+  createdAt                  DateTime                  @default(now())
+  updatedAt                  DateTime                  @updatedAt
+  facility                   Facility                  @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  resident                   Resident                  @relation(fields: [residentId], references: [id], onDelete: Cascade)
+  treatmentPlan              TreatmentPlanV2           @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
+  problem                    TreatmentPlanProblem      @relation(fields: [problemId], references: [id])
+  goal                       TreatmentPlanGoal         @relation(fields: [goalId], references: [id])
+  objective                  TreatmentPlanObjective    @relation(fields: [objectiveId], references: [id])
+  treatmentCalendarSession   TreatmentCalendarSession? @relation(fields: [treatmentCalendarSessionId], references: [id])
+  auditLogs                  NoteGenerationAuditLog[]
+
+  @@index([facilityId, residentId, createdAt])
+  @@index([treatmentPlanId])
+  @@index([problemId, goalId, objectiveId])
+}
+
+model NoteGenerationAuditLog {
+  id           String                       @id @default(cuid())
+  facilityId   String
+  residentId   String
+  generationId String?
+  action       String
+  actorId      String
+  actorRole    String
+  requestId    String
+  metadata     Json
+  createdAt    DateTime                     @default(now())
+  facility     Facility                     @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  resident     Resident                     @relation(fields: [residentId], references: [id], onDelete: Cascade)
+  generation   ClinicalNoteDraftGeneration? @relation(fields: [generationId], references: [id])
+
+  @@index([facilityId, residentId, createdAt])
+  @@index([generationId])
+}
+
+model FacilityPrintSettings {
+  id                                   String   @id @default(cuid())
+  facilityId                           String   @unique
+  facilityLegalName                    String?
+  dbaName                              String?
+  address                              String?
+  phone                                String?
+  licenseNumber                        String?
+  logoUrl                              String?
+  footerDisclaimer                     String?
+  printedNoteTitle                     String   @default("Clinical Note Draft")
+  showAiDraftDisclaimerOnPrintedDrafts Boolean  @default(true)
+  showStaffCredentials                 Boolean  @default(true)
+  showTreatmentPlanLinkageSection      Boolean  @default(true)
+  showAuditMetadataSection             Boolean  @default(true)
+  createdAt                            DateTime @default(now())
+  updatedAt                            DateTime @updatedAt
+  facility                             Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
 }

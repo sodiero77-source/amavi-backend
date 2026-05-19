@@ -1,8 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../../common/db/prisma.service';
-import { EventBusService } from '../../common/events/event-bus.service';
-import { RequestActorContext } from '../../common/auth/request-context.interface';
-import { CreateResidentDto } from './dto';
+import { Injectable, NotFoundException } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
+import { RequestActorContext } from "../../common/auth/request-context.interface";
+import { PrismaService } from "../../common/db/prisma.service";
+import { EventBusService } from "../../common/events/event-bus.service";
+import { CreateResidentDto, UpdateResidentDto } from "./dto";
 
 @Injectable()
 export class ResidentsService {
@@ -11,10 +12,10 @@ export class ResidentsService {
     private readonly eventBus: EventBusService,
   ) {}
 
-  async create(actor: RequestActorContext, dto: CreateResidentDto) {
+  async create(dto: CreateResidentDto) {
     const resident = await this.prisma.resident.create({
       data: {
-        facilityId: actor.facilityId,
+        facilityId: dto.facilityId,
         firstName: dto.firstName,
         lastName: dto.lastName,
         dateOfBirth: new Date(dto.dateOfBirth),
@@ -23,34 +24,74 @@ export class ResidentsService {
     });
 
     this.eventBus.publish({
-      name: 'ResidentCreated',
+      name: "ResidentCreated",
       occurredAt: new Date().toISOString(),
       payload: {
         residentId: resident.id,
-        facilityId: actor.facilityId,
-        actorId: actor.actorId,
+        facilityId: dto.facilityId,
       },
     });
 
     return resident;
   }
 
-  async list(facilityId: string) {
+  async list(actor: RequestActorContext) {
     return this.prisma.resident.findMany({
-      where: { facilityId },
-      orderBy: { createdAt: 'desc' },
+      where: { facilityId: actor.facilityId },
+      orderBy: { createdAt: "desc" },
     });
   }
 
-  async getOne(facilityId: string, residentId: string) {
+  async getOne(actor: RequestActorContext, residentId: string) {
     const resident = await this.prisma.resident.findFirst({
-      where: { id: residentId, facilityId },
+      where: { id: residentId, facilityId: actor.facilityId },
     });
 
     if (!resident) {
-      throw new NotFoundException('Resident not found');
+      throw new NotFoundException("Resident not found");
     }
 
     return resident;
+  }
+
+  async update(
+    actor: RequestActorContext,
+    residentId: string,
+    dto: UpdateResidentDto,
+  ) {
+    const data: Prisma.ResidentUpdateManyMutationInput = {
+      ...(dto.firstName !== undefined && { firstName: dto.firstName }),
+      ...(dto.lastName !== undefined && { lastName: dto.lastName }),
+      ...(dto.dob !== undefined && { dateOfBirth: new Date(dto.dob) }),
+      ...(dto.status !== undefined && { status: dto.status }),
+    };
+
+    const result = await this.prisma.resident.updateMany({
+      where: { id: residentId, facilityId: actor.facilityId },
+      data,
+    });
+
+    if (result.count === 0) {
+      throw new NotFoundException("Resident not found");
+    }
+
+    return this.prisma.resident.findFirst({
+      where: { id: residentId, facilityId: actor.facilityId },
+    });
+  }
+
+  async remove(actor: RequestActorContext, residentId: string) {
+    const result = await this.prisma.resident.updateMany({
+      where: { id: residentId, facilityId: actor.facilityId },
+      data: { status: "DISCHARGED" },
+    });
+
+    if (result.count === 0) {
+      throw new NotFoundException("Resident not found");
+    }
+
+    return this.prisma.resident.findFirst({
+      where: { id: residentId, facilityId: actor.facilityId },
+    });
   }
 }

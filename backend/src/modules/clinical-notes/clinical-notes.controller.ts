@@ -1,10 +1,10 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
-import { RequestContextGuard } from '../../common/guards/request-context.guard';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { ClinicalNotesService } from './clinical-notes.service';
 import { CreateClinicalNoteDto, UpdateClinicalNoteDto } from './dto';
 
 @Controller('clinical-notes')
-@UseGuards(RequestContextGuard)
+@UseGuards(JwtAuthGuard)
 export class ClinicalNotesController {
   constructor(private readonly clinicalNotesService: ClinicalNotesService) {}
 
