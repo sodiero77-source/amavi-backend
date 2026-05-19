@@ -1,31 +1,52 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/db/prisma.service';
-import { CreateTreatmentPlanDto } from './dto/create-treatment-plan.dto';
-import { ListTreatmentPlansQueryDto } from './dto/list-treatment-plans-query.dto';
+import { CreateTreatmentPlanDto, ListTreatmentPlansQueryDto } from './dto';
 
 @Injectable()
 export class TreatmentPlansService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(actor: any, dto: CreateTreatmentPlanDto) {
-    return this.prisma.treatmentPlan.create({
+    const resident = await this.prisma.resident.findFirst({
+      where: { id: dto.residentId, facilityId: actor.facilityId },
+    });
+    if (!resident) {
+      throw new NotFoundException('Resident not found in this facility');
+    }
+    return this.prisma.treatmentPlanV2.create({
       data: {
+        facilityId: actor.facilityId,
         residentId: dto.residentId,
-        problem: dto.problem,
-        goal: dto.goal,
-        objective: dto.objective,
-        createdBy: actor.actor_id,
-        facilityId: actor.facility_id,
+        createdById: actor.actorId,
+        status: 'ACTIVE',
+        problems: {
+          create: dto.problems.map((p) => ({
+            description: p.description,
+            goals: {
+              create: p.goals.map((g) => ({
+                description: g.description,
+                objectives: {
+                  create: g.objectives.map((o) => ({
+                    description: o.description,
+                    targetDate: o.targetDate ? new Date(o.targetDate) : null,
+                  })),
+                },
+              })),
+            },
+          })),
+        },
       },
+      include: { problems: { include: { goals: { include: { objectives: true } } } } },
     });
   }
 
   async list(actor: any, query: ListTreatmentPlansQueryDto) {
-    return this.prisma.treatmentPlan.findMany({
+    return this.prisma.treatmentPlanV2.findMany({
       where: {
-        facilityId: actor.facility_id,
+        facilityId: actor.facilityId,
         ...(query.residentId && { residentId: query.residentId }),
       },
+      include: { problems: { include: { goals: { include: { objectives: true } } } } },
       orderBy: { createdAt: 'desc' },
     });
   }

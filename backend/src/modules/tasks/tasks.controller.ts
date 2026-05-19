@@ -1,10 +1,10 @@
 import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
-import { RequestContextGuard } from '../../common/guards/request-context.guard';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CreateTaskDto } from './dto';
 import { TasksService } from './tasks.service';
 
 @Controller('tasks')
-@UseGuards(RequestContextGuard)
+@UseGuards(JwtAuthGuard)
 export class TasksController {
   constructor(private readonly tasksService: TasksService) {}
 

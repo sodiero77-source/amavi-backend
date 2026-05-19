@@ -1,10 +1,10 @@
 import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
-import { RequestContextGuard } from '../../common/guards/request-context.guard';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { ComplianceService } from './compliance.service';
 import { CreateComplianceAlertDto } from './dto';
 
 @Controller('compliance-alerts')
-@UseGuards(RequestContextGuard)
+@UseGuards(JwtAuthGuard)
 export class ComplianceController {
   constructor(private readonly complianceService: ComplianceService) {}
 

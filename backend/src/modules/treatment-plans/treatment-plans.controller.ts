@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Post, Query, Req, UseGuards } from '@nestjs/common';
-import { RequestContextGuard } from '../../common/guards/request-context.guard';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { Request } from 'express';
 import { TreatmentPlansService } from './treatment-plans.service';
 import {
@@ -12,7 +12,7 @@ type RequestWithActorContext = Request & {
   actorContext: RequestActorContext;
 };
 
-@UseGuards(RequestContextGuard)
+@UseGuards(JwtAuthGuard)
 @Controller('treatment-plans')
 export class TreatmentPlansController {
   constructor(

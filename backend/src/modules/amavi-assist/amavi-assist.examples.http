@@ -1,0 +1,93 @@
+### Generate a treatment-plan-aligned draft note
+POST http://localhost:3000/api/amavi-assist/generate-note-draft
+x-actor-id: staff_123
+x-actor-role: CLINICIAN
+x-facility-id: facility_123
+x-request-id: req_20260519_001
+Content-Type: application/json
+
+{
+  "residentId": "resident_123",
+  "facilityId": "facility_123",
+  "treatmentPlanId": "tplan_123",
+  "problemId": "problem_123",
+  "goalId": "goal_123",
+  "objectiveId": "objective_123",
+  "serviceType": "Individual Therapy",
+  "sessionTopic": "Coping skills for anxiety triggers",
+  "staffId": "staff_123",
+  "treatmentCalendarSessionId": "calendar_session_123",
+  "clinicalIntervention": "Reviewed the scheduled coping-skills objective and prompted resident to identify supports listed in the treatment plan.",
+  "nextStep": "Continue addressing the objective during the next scheduled individual therapy session."
+}
+
+### Required-field validation example
+POST http://localhost:3000/api/amavi-assist/generate-note-draft
+x-actor-id: staff_123
+x-actor-role: CLINICIAN
+x-facility-id: facility_123
+x-request-id: req_20260519_002
+Content-Type: application/json
+
+{
+  "residentId": "resident_123",
+  "facilityId": "facility_123",
+  "treatmentPlanId": "tplan_123",
+  "problemId": "problem_123",
+  "goalId": "goal_123",
+  "objectiveId": "objective_123",
+  "serviceType": "Group Therapy",
+  "sessionTopic": "",
+  "staffId": "staff_123"
+}
+
+### Fetch monthly treatment calendar sessions for a resident
+GET http://localhost:3000/api/amavi-assist/calendar/resident_123
+x-actor-id: staff_123
+x-actor-role: CLINICIAN
+x-facility-id: facility_123
+x-request-id: req_20260519_003
+
+### Fetch draft generation history for a resident
+GET http://localhost:3000/api/amavi-assist/generation-history/resident_123
+x-actor-id: staff_123
+x-actor-role: CLINICIAN
+x-facility-id: facility_123
+x-request-id: req_20260519_004
+
+### Fetch facility print settings
+GET http://localhost:3000/api/amavi-assist/print-settings
+x-actor-id: admin_123
+x-actor-role: ADMIN
+x-facility-id: facility_123
+x-request-id: req_20260519_005
+
+### Update facility print settings
+PATCH http://localhost:3000/api/amavi-assist/print-settings
+x-actor-id: admin_123
+x-actor-role: ADMIN
+x-facility-id: facility_123
+x-request-id: req_20260519_006
+Content-Type: application/json
+
+{
+  "facilityLegalName": "Amavi Behavioral Health LLC",
+  "dbaName": "Amavi Recovery Center",
+  "address": "123 Care Way, Phoenix, AZ 85001",
+  "phone": "602-555-0199",
+  "licenseNumber": "BH-123456",
+  "logoUrl": "https://example.com/amavi-logo.png",
+  "footerDisclaimer": "Printed draft documentation is for internal clinical review until signed by an authorized clinician.",
+  "printedNoteTitle": "Therapy Note Draft",
+  "showAiDraftDisclaimerOnPrintedDrafts": true,
+  "showStaffCredentials": true,
+  "showTreatmentPlanLinkageSection": true,
+  "showAuditMetadataSection": true
+}
+
+### Fetch generated draft print output
+GET http://localhost:3000/api/amavi-assist/generated-note-drafts/generation_123/print
+x-actor-id: staff_123
+x-actor-role: CLINICIAN
+x-facility-id: facility_123
+x-request-id: req_20260519_007
