@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Amavi Assist | Clinical Note Automation</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Amavi navigation">
+        <div class="brand">
+          <div class="brand-mark">A</div>
+          <div>
+            <p class="brand-name">Amavi</p>
+            <p class="brand-subtitle">Clinical Suite</p>
+          </div>
+        </div>
+
+        <nav class="nav-list" aria-label="Primary">
+          <a class="nav-item" href="#">Dashboard</a>
+          <a class="nav-item" href="#">Residents</a>
+          <a class="nav-item" href="#">Treatment Plans</a>
+          <a class="nav-item active" href="#">Amavi Assist</a>
+          <a class="nav-item" href="#">Compliance</a>
+        </nav>
+
+        <div class="sidebar-note">
+          <span class="status-dot"></span>
+          Drafts require clinician review before signing.
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">AI-assisted documentation</p>
+            <h1>Amavi Assist Clinical Note Automation</h1>
+          </div>
+          <div class="topbar-actions">
+            <span class="draft-badge">DRAFT WORKFLOW</span>
+          </div>
+        </header>
+
+        <section class="settings-card" aria-label="Connection settings">
+          <div class="section-heading">
+            <h2>Backend connection</h2>
+            <p>Uses Amavi auth headers for draft-generation calls.</p>
+          </div>
+          <div class="connection-grid">
+            <label>
+              API base URL
+              <input id="apiBaseUrl" value="http://localhost:3000" />
+            </label>
+            <label>
+              Facility ID
+              <input id="facilityId" placeholder="facility_123" />
+            </label>
+            <label>
+              Actor ID
+              <input id="actorId" placeholder="staff_123" />
+            </label>
+            <label>
+              Staff ID
+              <input id="staffId" placeholder="staff_123" />
+            </label>
+            <label>
+              Actor role
+              <select id="actorRole">
+                <option>CLINICIAN</option>
+                <option>SUPERVISOR</option>
+                <option>ADMIN</option>
+                <option>STAFF</option>
+              </select>
+            </label>
+            <label>
+              Bearer token for resident/treatment-plan lookups
+              <input id="bearerToken" placeholder="Optional JWT" />
+            </label>
+          </div>
+        </section>
+
+        <div class="workspace-grid">
+          <section class="workflow-card" aria-label="Generate draft workflow">
+            <div class="card-header purple">
+              <div>
+                <h2>Generate draft</h2>
+                <p>Treatment-plan-aligned note draft for clinician review.</p>
+              </div>
+              <button class="secondary-button" id="loadResidentsButton" type="button">
+                Load residents
+              </button>
+            </div>
+
+            <div class="form-grid">
+              <label>
+                Select resident
+                <select id="residentSelect">
+                  <option value="">Load or enter resident ID below</option>
+                </select>
+              </label>
+              <label>
+                Resident ID
+                <input id="residentId" placeholder="resident_123" />
+              </label>
+              <label>
+                Treatment plan objective
+                <select id="objectiveSelect">
+                  <option value="">Select resident first</option>
+                </select>
+              </label>
+              <label>
+                Monthly calendar session
+                <select id="calendarSessionSelect">
+                  <option value="">Select resident first</option>
+                </select>
+              </label>
+              <label>
+                Service type
+                <input id="serviceType" placeholder="Individual Therapy" />
+              </label>
+              <label>
+                Session topic
+                <input id="sessionTopic" placeholder="Coping skills for anxiety triggers" />
+              </label>
+              <label>
+                Intervention category
+                <select id="interventionCategory">
+                  <option value="Skill building">Skill building</option>
+                  <option value="Motivational interviewing">Motivational interviewing</option>
+                  <option value="CBT intervention">CBT intervention</option>
+                  <option value="Relapse prevention">Relapse prevention</option>
+                  <option value="Psychoeducation">Psychoeducation</option>
+                  <option value="Care coordination">Care coordination</option>
+                </select>
+              </label>
+              <label>
+                Optional clinician-provided intervention detail
+                <textarea id="clinicalIntervention" rows="3" placeholder="Document only what is known from the session source material."></textarea>
+              </label>
+            </div>
+
+            <div class="action-row">
+              <button class="primary-button" id="generateButton" type="button">
+                Generate Draft
+              </button>
+              <button class="secondary-button" id="historyButton" type="button">
+                Load generation history
+              </button>
+            </div>
+
+            <div class="alert" id="message" role="status" aria-live="polite"></div>
+          </section>
+
+          <section class="draft-card" aria-label="Generated draft">
+            <div class="section-heading">
+              <div>
+                <h2>Editable generated draft output</h2>
+                <p>Draft content remains unsigned until reviewed and signed by a human clinician.</p>
+              </div>
+              <span class="draft-badge">DRAFT</span>
+            </div>
+            <textarea id="draftOutput" class="draft-editor" spellcheck="true" placeholder="Generated draft will appear here. Do not treat this as a signed note."></textarea>
+            <div class="action-row">
+              <button class="secondary-button" id="printPreviewButton" type="button" disabled>
+                Print Preview
+              </button>
+            </div>
+          </section>
+        </div>
+
+        <section class="print-card" aria-label="Facility branded print preview">
+          <div class="section-heading">
+            <div>
+              <h2>Facility-branded print preview</h2>
+              <p>Presentation only. Does not modify draft data or create signed notes.</p>
+            </div>
+          </div>
+
+          <article class="print-preview" id="printPreview">
+            <div class="print-empty">
+              Generate a draft, then load print preview to see facility branding.
+            </div>
+          </article>
+        </section>
+
+        <section class="history-card" aria-label="Generation history">
+          <div class="section-heading">
+            <h2>Generation history</h2>
+            <p>Recent generated drafts for the selected resident.</p>
+          </div>
+          <div id="historyList" class="history-list">
+            <p class="muted">No history loaded.</p>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="./amavi-assist.js"></script>
+  </body>
+</html>
