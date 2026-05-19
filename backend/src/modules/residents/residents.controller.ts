@@ -9,17 +9,21 @@ import {
   Req,
   UseGuards,
 } from "@nestjs/common";
+
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
+import { RequestContextGuard } from "../../common/guards/request-context.guard";
+
 import {
   CreateResidentDto,
   DeleteResidentParamsDto,
   GetResidentParamsDto,
   UpdateResidentDto,
 } from "./dto";
+
 import { ResidentsService } from "./residents.service";
 
 @Controller("residents")
-// @UseGuards(JwtAuthGuard)
+@UseGuards(RequestContextGuard)
 export class ResidentsController {
   constructor(private readonly residentsService: ResidentsService) {}
 
