@@ -13,6 +13,8 @@ type RequestWithActorContext = Request & {
 };
 
 import { RequestContextGuard } from '../../common/guards/request-context.guard';
+
+@UseGuards(RequestContextGuard)
 @Controller('treatment-plans')
 export class TreatmentPlansController {
   constructor(
