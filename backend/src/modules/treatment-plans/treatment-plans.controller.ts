@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Query, Req } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, Req, UseGuards } from '@nestjs/common';
 
 import { Request } from 'express';
 import { TreatmentPlansService } from './treatment-plans.service';
@@ -12,7 +12,7 @@ type RequestWithActorContext = Request & {
   actorContext: RequestActorContext;
 };
 
-
+import { RequestContextGuard } from '../../common/guards/request-context.guard';
 @Controller('treatment-plans')
 export class TreatmentPlansController {
   constructor(
