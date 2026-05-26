@@ -14,6 +14,8 @@ model Facility {
   updatedAt                    DateTime                      @updatedAt
   residents                    Resident[]
   users                        User[]
+  medicationSchedules          MedicationSchedule[]
+  medicationAdministrations    MedicationAdministration[]
   treatmentPlansV2             TreatmentPlanV2[]
   treatmentCalendarSessions    TreatmentCalendarSession[]
   clinicalNoteDraftGenerations ClinicalNoteDraftGeneration[]
@@ -50,6 +52,8 @@ model Resident {
   clinicalNotes                ClinicalNote[]
   complianceAlerts             ComplianceAlert[]
   medicationOrders             MedicationOrder[]
+  medicationSchedules          MedicationSchedule[]
+  medicationAdministrations    MedicationAdministration[]
   facility                     Facility                      @relation(fields: [facilityId], references: [id], onDelete: Cascade)
   tasks                        Task[]
   treatmentPlansV2             TreatmentPlanV2[]
@@ -74,18 +78,74 @@ model ClinicalNote {
 }
 
 model MedicationOrder {
-  id             String                @id @default(cuid())
-  facilityId     String
-  residentId     String
-  medicationName String
-  dose           String
-  route          String
-  frequency      String
-  status         MedicationOrderStatus @default(DRAFT)
-  createdById    String
-  createdAt      DateTime              @default(now())
-  updatedAt      DateTime              @updatedAt
-  resident       Resident              @relation(fields: [residentId], references: [id], onDelete: Cascade)
+  id                      String                     @id @default(cuid())
+  facilityId              String
+  residentId              String
+  medicationName          String
+  dose                    String
+  route                   String
+  frequency               String
+  status                  MedicationOrderStatus      @default(DRAFT)
+  createdById             String
+  createdAt               DateTime                   @default(now())
+  updatedAt               DateTime                   @updatedAt
+  resident                Resident                   @relation(fields: [residentId], references: [id], onDelete: Cascade)
+  schedules               MedicationSchedule[]
+  administrations         MedicationAdministration[]
+
+  @@index([facilityId, residentId])
+}
+
+model MedicationSchedule {
+  id                      String                     @id @default(cuid())
+  facilityId              String
+  residentId              String
+  medicationOrderId       String
+  type                    MedicationScheduleType     @default(SCHEDULED)
+  scheduledTime           String?
+  scheduledDays           String[]                   @default([])
+  startDate               DateTime?
+  endDate                 DateTime?
+  instructions            String?
+  isActive                Boolean                    @default(true)
+  createdById             String
+  createdAt               DateTime                   @default(now())
+  updatedAt               DateTime                   @updatedAt
+  facility                Facility                   @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  resident                Resident                   @relation(fields: [residentId], references: [id], onDelete: Cascade)
+  medicationOrder         MedicationOrder            @relation(fields: [medicationOrderId], references: [id], onDelete: Cascade)
+  administrations         MedicationAdministration[]
+
+  @@index([facilityId, residentId, isActive])
+  @@index([medicationOrderId])
+}
+
+model MedicationAdministration {
+  id                         String                         @id @default(cuid())
+  facilityId                 String
+  residentId                 String
+  medicationOrderId          String
+  scheduleId                 String?
+  administrationDate         DateTime
+  status                     MedicationAdministrationStatus
+  administeredAt             DateTime?
+  administeredById           String
+  administeredByInitials     String
+  notes                      String?
+  reason                     String?
+  prnIndication              String?
+  prnFollowUpAt              DateTime?
+  prnEffectiveness           String?
+  createdAt                  DateTime                       @default(now())
+  updatedAt                  DateTime                       @updatedAt
+  facility                   Facility                       @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  resident                   Resident                       @relation(fields: [residentId], references: [id], onDelete: Cascade)
+  medicationOrder            MedicationOrder                @relation(fields: [medicationOrderId], references: [id], onDelete: Cascade)
+  schedule                   MedicationSchedule?            @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+
+  @@index([facilityId, residentId, administrationDate])
+  @@index([medicationOrderId])
+  @@index([scheduleId])
 }
 
 model Task {
@@ -152,6 +212,20 @@ enum MedicationOrderStatus {
   ACTIVE
   HELD
   DISCONTINUED
+}
+
+enum MedicationScheduleType {
+  SCHEDULED
+  PRN
+}
+
+enum MedicationAdministrationStatus {
+  ADMINISTERED
+  REFUSED
+  MISSED
+  HELD
+  OUT_OF_MEDICATION
+  MEDICATION_ERROR
 }
 
 enum TaskStatus {
