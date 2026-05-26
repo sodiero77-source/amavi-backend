@@ -12,6 +12,7 @@ import { ComplianceModule } from "./modules/compliance/compliance.module";
 import { TreatmentPlansModule } from "./modules/treatment-plans/treatment-plans.module";
 import { AiModule } from "./modules/ai/ai.module";
 import { AmaviAssistModule } from "./modules/amavi-assist";
+import { FacilitySettingsModule } from "./modules/facility-settings/facility-settings.module";
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { AmaviAssistModule } from "./modules/amavi-assist";
     TreatmentPlansModule,
     AiModule,
     AmaviAssistModule,
+    FacilitySettingsModule,
   ],
 })
 export class AppModule {}

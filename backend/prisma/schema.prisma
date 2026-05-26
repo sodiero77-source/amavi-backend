@@ -21,6 +21,7 @@ model Facility {
   clinicalNoteDraftGenerations ClinicalNoteDraftGeneration[]
   noteGenerationAuditLogs      NoteGenerationAuditLog[]
   printSettings                FacilityPrintSettings?
+  agencySettings               FacilitySettings?
 }
 
 model User {
@@ -438,4 +439,36 @@ model FacilityPrintSettings {
   createdAt                            DateTime @default(now())
   updatedAt                            DateTime @updatedAt
   facility                             Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+}
+
+model FacilitySettings {
+  id                         String   @id @default(cuid())
+  facilityId                 String   @unique
+  companyName                String
+  providerNpiOrTaxNumber     String
+  email                      String
+  logoUrl                    String?
+  programType                String
+  addressLine1               String
+  addressLine2               String?
+  city                       String
+  state                      String
+  postalCode                 String
+  timeZone                   String
+  shifts                     String[] @default([])
+  servicesProvided           String[] @default([])
+  levelsOfFunctioning        String[] @default([])
+  urgentNotificationEmails   String[] @default([])
+  residentAttendanceOptions  String[] @default([])
+  clientLabel                String
+  residentReportLabel        String
+  governingBodyLabel         String
+  residentIdLabel            String
+  secondaryResidentIdLabel   String?
+  serviceCoordinatorLabel    String
+  evaluatorLeadLabel         String
+  goalsLabel                 String
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+  facility                   Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
 }
