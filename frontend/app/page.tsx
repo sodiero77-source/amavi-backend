@@ -85,6 +85,19 @@ interface Alert {
   createdAt: string;
 }
 
+interface FacilitySettings {
+  companyName: string;
+  logoUrl?: string | null;
+  clientLabel: string;
+  residentReportLabel: string;
+  governingBodyLabel: string;
+  residentIdLabel: string;
+  secondaryResidentIdLabel?: string | null;
+  serviceCoordinatorLabel: string;
+  evaluatorLeadLabel: string;
+  goalsLabel: string;
+}
+
 interface DueMed {
   order: MedOrder;
   schedule: Schedule;
@@ -92,6 +105,64 @@ interface DueMed {
   dueAt: Date;
   administration?: Administration;
 }
+
+const defaultApiBase = "https://amavi-api.onrender.com/api";
+
+const fallbackSettings: FacilitySettings = {
+  companyName: "Amavi",
+  logoUrl: null,
+  clientLabel: "Resident",
+  residentReportLabel: "Resident Report",
+  governingBodyLabel: "Governing Body",
+  residentIdLabel: "Resident ID",
+  secondaryResidentIdLabel: null,
+  serviceCoordinatorLabel: "Service Coordinator",
+  evaluatorLeadLabel: "Evaluator Lead",
+  goalsLabel: "Goals",
+};
+
+const demoResidents: Resident[] = [
+  {
+    id: "demo-resident-1",
+    firstName: "Demo",
+    lastName: "Resident",
+    dateOfBirth: "1985-03-12T00:00:00.000Z",
+  },
+];
+
+const demoOrders: MedOrder[] = [
+  {
+    id: "demo-order-1",
+    residentId: "demo-resident-1",
+    medicationName: "Demo Medication",
+    dose: "10 mg",
+    route: "PO",
+    frequency: "Daily",
+    status: "ACTIVE",
+    schedules: [
+      {
+        id: "demo-schedule-1",
+        residentId: "demo-resident-1",
+        medicationOrderId: "demo-order-1",
+        type: "SCHEDULED",
+        scheduledTime: "08:00",
+        scheduledDays: [],
+        instructions: "Demo fallback schedule",
+        isActive: true,
+      },
+    ],
+  },
+];
+
+const demoTasks: Task[] = [
+  {
+    id: "demo-task-1",
+    residentId: "demo-resident-1",
+    title: "Demo fallback task",
+    status: "OPEN",
+    dueAt: new Date().toISOString(),
+  },
+];
 
 const exceptionStatuses: MedStatus[] = [
   "REFUSED",
@@ -152,7 +223,7 @@ function dueAt(schedule: Schedule, anchor = new Date()) {
 
 export default function OperationsPage() {
   const [tab, setTab] = useState<Tab>("today");
-  const [apiBase, setApiBase] = useState("http://localhost:3000/api");
+  const [apiBase, setApiBase] = useState(defaultApiBase);
   const [facilityId, setFacilityId] = useState("");
   const [actorId, setActorId] = useState("");
   const [actorRole, setActorRole] = useState("MEDTECH");
@@ -165,6 +236,8 @@ export default function OperationsPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [settings, setSettings] = useState<FacilitySettings>(fallbackSettings);
+  const [fallbackNotice, setFallbackNotice] = useState("");
   const [selectedResidentId, setSelectedResidentId] = useState("");
   const [selectedMed, setSelectedMed] = useState<DueMed | null>(null);
   const [selectedStatus, setSelectedStatus] = useState<MedStatus | null>(null);
@@ -245,26 +318,87 @@ export default function OperationsPage() {
     return data as T;
   }
 
+  async function loadResource<T>(
+    label: string,
+    path: string,
+    fallback: T,
+  ): Promise<{ data: T; error?: string }> {
+    try {
+      return { data: await api<T>(path) };
+    } catch (error) {
+      return {
+        data: fallback,
+        error:
+          error instanceof Error
+            ? `${label}: ${error.message}`
+            : `${label}: request failed`,
+      };
+    }
+  }
+
   async function load() {
     setMessage("");
+    setFallbackNotice("");
     try {
+      const settingsResult = await loadResource<FacilitySettings>(
+        "facility settings",
+        "/facility-settings",
+        fallbackSettings,
+      );
       const [residentData, orderData, adminData, taskData, noteData, alertData] =
         await Promise.all([
-          api<Resident[]>("/residents"),
-          api<MedOrder[]>("/medication-orders"),
-          api<Administration[]>("/medication-administrations"),
-          api<Task[]>("/tasks"),
-          api<Note[]>("/clinical-notes"),
-          api<Alert[]>("/compliance-alerts"),
+          loadResource<Resident[]>(
+            "residents",
+            "/residents",
+            demoResidents,
+          ),
+          loadResource<MedOrder[]>(
+            "medication orders",
+            "/medication-orders",
+            demoOrders,
+          ),
+          loadResource<Administration[]>(
+            "medication administrations",
+            "/medication-administrations",
+            [],
+          ),
+          loadResource<Task[]>("tasks", "/tasks", demoTasks),
+          loadResource<Note[]>("clinical notes", "/clinical-notes", []),
+          loadResource<Alert[]>(
+            "alerts",
+            "/compliance-alerts",
+            [],
+          ),
         ]);
-      setResidents(residentData);
-      setOrders(orderData);
-      setAdministrations(adminData);
-      setTasks(taskData);
-      setNotes(noteData);
-      setAlerts(alertData);
-      setSelectedResidentId((current) => current || residentData[0]?.id || "");
-      setMessage("Current work loaded.");
+
+      const errors = [
+        settingsResult.error,
+        residentData.error,
+        orderData.error,
+        adminData.error,
+        taskData.error,
+        noteData.error,
+        alertData.error,
+      ].filter(Boolean);
+
+      setSettings(settingsResult.data ?? fallbackSettings);
+      setResidents(residentData.data);
+      setOrders(orderData.data);
+      setAdministrations(adminData.data);
+      setTasks(taskData.data);
+      setNotes(noteData.data);
+      setAlerts(alertData.data);
+      setSelectedResidentId((current) => current || residentData.data[0]?.id || "");
+      setFallbackNotice(
+        errors.length > 0
+          ? `Demo fallback active because live API data could not be loaded. ${errors.join(" | ")}`
+          : "",
+      );
+      setMessage(
+        errors.length > 0
+          ? "Live API unavailable. Showing clearly labeled demo fallback."
+          : "Live work loaded from Render API.",
+      );
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to load current work.");
     }
@@ -274,7 +408,11 @@ export default function OperationsPage() {
     const saved = localStorage.getItem("amavi.operations");
     if (!saved) return;
     const parsed = JSON.parse(saved) as Record<string, string>;
-    setApiBase(parsed.apiBase ?? "http://localhost:3000/api");
+    setApiBase(
+      parsed.apiBase && parsed.apiBase !== "http://localhost:3000/api"
+        ? parsed.apiBase
+        : defaultApiBase,
+    );
     setFacilityId(parsed.facilityId ?? "");
     setActorId(parsed.actorId ?? "");
     setActorRole(parsed.actorRole ?? "MEDTECH");
@@ -300,6 +438,10 @@ export default function OperationsPage() {
 
   async function submitAction() {
     if (!selectedMed || !selectedStatus) return;
+    if (selectedMed.order.id.startsWith("demo-")) {
+      setMessage("Demo fallback item only. Live medication actions require live API data.");
+      return;
+    }
     const payload: Record<string, unknown> = {
       residentId: selectedMed.order.residentId,
       medicationOrderId: selectedMed.order.id,
@@ -335,9 +477,15 @@ export default function OperationsPage() {
   return (
     <main className="app-shell">
       <header className="topbar">
-        <div>
-          <p className="eyebrow">Amavi pilot operations</p>
+        <div className="brand-row">
+          {settings.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={settings.logoUrl} alt="" className="facility-logo" />
+          ) : null}
+          <div>
+          <p className="eyebrow">{settings.companyName} pilot operations</p>
           <h1>Today, medication pass, MAR, and shift handoff</h1>
+          </div>
         </div>
         <Button type="button" onClick={load}>Load current work</Button>
       </header>
@@ -354,6 +502,7 @@ export default function OperationsPage() {
       </Card>
 
       {message ? <div className="status-line">{message}</div> : null}
+      {fallbackNotice ? <div className="fallback-line">{fallbackNotice}</div> : null}
 
       <nav className="tabs">
         {[
@@ -382,6 +531,7 @@ export default function OperationsPage() {
           notes={unsignedNotes}
           alerts={openAlerts}
           residentById={residentById}
+          settings={settings}
           onAction={openAction}
           onSelectResident={setSelectedResidentId}
         />
@@ -394,6 +544,7 @@ export default function OperationsPage() {
           selectedResidentId={selectedResident?.id ?? ""}
           residentOrders={residentOrders}
           dueMeds={dueMeds.filter((item) => item.order.residentId === selectedResident?.id)}
+          settings={settings}
           onSelectResident={setSelectedResidentId}
           onAction={openAction}
         />
@@ -406,6 +557,7 @@ export default function OperationsPage() {
           orders={residentOrders}
           administrations={administrations}
           selectedResidentId={selectedResident?.id ?? ""}
+          settings={settings}
           onSelectResident={setSelectedResidentId}
         />
       ) : null}
@@ -420,6 +572,7 @@ export default function OperationsPage() {
           alerts={openAlerts}
           residentById={residentById}
           orderById={orderById}
+          settings={settings}
           onAction={openAction}
           onSelectResident={setSelectedResidentId}
         />
@@ -462,6 +615,7 @@ function TodayView(props: {
   notes: Note[];
   alerts: Alert[];
   residentById: Map<string, Resident>;
+  settings: FacilitySettings;
   onAction: (item: DueMed, status: MedStatus) => void;
   onSelectResident: (id: string) => void;
 }) {
@@ -543,6 +697,7 @@ function MedPass({
   selectedResidentId,
   residentOrders,
   dueMeds,
+  settings,
   onSelectResident,
   onAction,
 }: {
@@ -551,12 +706,13 @@ function MedPass({
   selectedResidentId: string;
   residentOrders: MedOrder[];
   dueMeds: DueMed[];
+  settings: FacilitySettings;
   onSelectResident: (id: string) => void;
   onAction: (item: DueMed, status: MedStatus) => void;
 }) {
   return (
     <div className="split-view">
-      <Card className="resident-list"><CardHeader><CardTitle>Residents</CardTitle></CardHeader><CardContent className="list">{residents.map((resident) => <button className={selectedResidentId === resident.id ? "resident-row active" : "resident-row"} key={resident.id} type="button" onClick={() => onSelectResident(resident.id)}><strong>{nameOf(resident)}</strong><span>DOB {dateOf(resident.dateOfBirth)}</span></button>)}</CardContent></Card>
+      <Card className="resident-list"><CardHeader><CardTitle>{settings.clientLabel}s</CardTitle></CardHeader><CardContent className="list">{residents.map((resident) => <button className={selectedResidentId === resident.id ? "resident-row active" : "resident-row"} key={resident.id} type="button" onClick={() => onSelectResident(resident.id)}><strong>{nameOf(resident)}</strong><span>DOB {dateOf(resident.dateOfBirth)}</span></button>)}</CardContent></Card>
       <Card><CardHeader><div><CardTitle>{nameOf(selectedResident)}</CardTitle><p className="muted">DOB {dateOf(selectedResident?.dateOfBirth)}</p></div><span className="allergy-box">Allergies: not available from current endpoint</span></CardHeader><CardContent className="stack"><h3>Due now</h3>{dueMeds.length === 0 ? <p className="muted">No due medications for this resident.</p> : null}{dueMeds.map((item) => <div className="work-item" key={`${item.order.id}-${item.schedule.id}`}><div><strong>{item.order.medicationName} {item.order.dose}</strong><p className="muted">{timeOf(item.dueAt)} - {item.order.route} - {item.order.frequency}</p></div><div className="action-strip"><Button size="sm" onClick={() => onAction(item, "ADMINISTERED")}>Administer</Button>{exceptionStatuses.map((status) => <Button key={status} size="sm" variant={status === "MEDICATION_ERROR" ? "destructive" : "outline"} onClick={() => onAction(item, status)}>{statusLabels[status]}</Button>)}</div></div>)}<h3>Active medications</h3>{residentOrders.map((order) => <div className="med-order" key={order.id}><strong>{order.medicationName} {order.dose}</strong><p className="muted">{order.route} - {order.frequency} - {order.status}</p>{(order.schedules ?? []).map((schedule) => <p className="schedule-line" key={schedule.id}>{schedule.type} {schedule.scheduledTime ?? "as needed"} {schedule.instructions ?? ""}</p>)}</div>)}</CardContent></Card>
     </div>
   );
@@ -569,18 +725,20 @@ function MarGrid({
   orders,
   administrations,
   onSelectResident,
+  settings,
 }: {
   residents: Resident[];
   selectedResident?: Resident;
   selectedResidentId: string;
   orders: MedOrder[];
   administrations: Administration[];
+  settings: FacilitySettings;
   onSelectResident: (id: string) => void;
 }) {
   const days = Array.from({ length: 31 }, (_, index) => index + 1);
   const initials = Array.from(new Set(administrations.map((item) => item.administeredByInitials).filter(Boolean)));
   return (
-    <Card><CardHeader><div><CardTitle>Monthly MAR</CardTitle><p className="muted">{nameOf(selectedResident)} - DOB {dateOf(selectedResident?.dateOfBirth)}</p></div><Select value={selectedResidentId} onChange={(event) => onSelectResident(event.target.value)}>{residents.map((resident) => <option key={resident.id} value={resident.id}>{nameOf(resident)}</option>)}</Select></CardHeader><CardContent><div className="mar-allergies">Allergies: not available from current resident endpoint</div><div className="mar-scroll"><table className="mar-table"><thead><tr><th>Medication / schedule</th>{days.map((day) => <th key={day}>{day}</th>)}</tr></thead><tbody>{orders.flatMap((order) => (order.schedules ?? []).map((schedule) => <tr key={`${order.id}-${schedule.id}`}><td><strong>{order.medicationName}</strong><span>{order.dose} {order.route} - {schedule.type === "PRN" ? "PRN" : schedule.scheduledTime ?? order.frequency}</span></td>{days.map((day) => { const match = administrations.find((item) => item.medicationOrderId === order.id && item.scheduleId === schedule.id && new Date(item.administrationDate).getDate() === day); return <td className={match ? `mar-cell status-${match.status}` : "mar-cell"} key={day}>{match ? match.status === "ADMINISTERED" ? match.administeredByInitials : marMarks[match.status] : ""}</td>; })}</tr>))}</tbody></table></div><div className="initials-key"><strong>Staff initials key:</strong> {initials.length ? initials.join(", ") : "No administrations recorded"}</div></CardContent></Card>
+    <Card><CardHeader><div><CardTitle>{settings.companyName} Monthly MAR</CardTitle><p className="muted">{nameOf(selectedResident)} - DOB {dateOf(selectedResident?.dateOfBirth)} - {settings.residentIdLabel}</p></div><Select value={selectedResidentId} onChange={(event) => onSelectResident(event.target.value)}>{residents.map((resident) => <option key={resident.id} value={resident.id}>{nameOf(resident)}</option>)}</Select></CardHeader><CardContent><div className="mar-allergies">Allergies: not available from current resident endpoint</div><div className="mar-scroll"><table className="mar-table"><thead><tr><th>Medication / schedule</th>{days.map((day) => <th key={day}>{day}</th>)}</tr></thead><tbody>{orders.flatMap((order) => (order.schedules ?? []).map((schedule) => <tr key={`${order.id}-${schedule.id}`}><td><strong>{order.medicationName}</strong><span>{order.dose} {order.route} - {schedule.type === "PRN" ? "PRN" : schedule.scheduledTime ?? order.frequency}</span></td>{days.map((day) => { const match = administrations.find((item) => item.medicationOrderId === order.id && item.scheduleId === schedule.id && new Date(item.administrationDate).getDate() === day); return <td className={match ? `mar-cell status-${match.status}` : "mar-cell"} key={day}>{match ? match.status === "ADMINISTERED" ? match.administeredByInitials : marMarks[match.status] : ""}</td>; })}</tr>))}</tbody></table></div><div className="initials-key"><strong>Staff initials key:</strong> {initials.length ? initials.join(", ") : "No administrations recorded"}</div></CardContent></Card>
   );
 }
 
@@ -593,6 +751,7 @@ function Handoff({
   alerts,
   residentById,
   orderById,
+  settings,
   onAction,
   onSelectResident,
 }: {
@@ -604,6 +763,7 @@ function Handoff({
   alerts: Alert[];
   residentById: Map<string, Resident>;
   orderById: Map<string, MedOrder>;
+  settings: FacilitySettings;
   onAction: (item: DueMed, status: MedStatus) => void;
   onSelectResident: (id: string) => void;
 }) {

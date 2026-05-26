@@ -29,6 +29,8 @@ button, input, select, textarea { font: inherit; }
   padding: 18px 20px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface);
 }
 .topbar h1 { margin: 2px 0 0; font-size: 24px; line-height: 1.2; letter-spacing: 0; }
+.brand-row { display: flex; align-items: center; gap: 12px; }
+.facility-logo { width: 44px; height: 44px; object-fit: contain; border-radius: 6px; border: 1px solid var(--border); background: #fff; }
 .eyebrow, .muted { margin: 0; color: var(--muted); font-size: 13px; }
 .connection-card { margin-top: 12px; }
 .connection-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; }
@@ -40,6 +42,7 @@ label { display: grid; gap: 5px; color: var(--muted); font-size: 12px; font-weig
 .textarea { min-height: 88px; resize: vertical; }
 .input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(33, 90, 122, 0.12); }
 .status-line { margin-top: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--muted); }
+.fallback-line { margin-top: 8px; padding: 10px 12px; border: 1px solid var(--warning); border-radius: 6px; background: var(--warning-bg); color: var(--warning); font-size: 13px; font-weight: 750; }
 .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
 .tab {
   min-height: 40px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface);
