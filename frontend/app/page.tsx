@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { Input, Select, Textarea } from "@/components/ui/input";
 
-type Tab = "today" | "pass" | "mar" | "handoff";
+type Tab = "today" | "pass" | "mar" | "handoff" | "chart";
 type MedStatus =
   | "ADMINISTERED"
   | "REFUSED"
@@ -20,6 +20,10 @@ interface Resident {
   firstName: string;
   lastName: string;
   dateOfBirth: string;
+  primaryDiagnosis?: string | null;
+  secondaryDiagnoses?: string[];
+  allergies?: string[] | null;
+  status?: string;
 }
 
 interface Schedule {
@@ -72,8 +76,47 @@ interface Note {
   id: string;
   residentId: string;
   title: string;
+  content?: string;
   status: string;
+  createdAt?: string;
   updatedAt: string;
+  treatmentPlanLinks?: NoteTreatmentPlanLink[];
+}
+
+interface TreatmentObjective {
+  id: string;
+  description: string;
+  status?: string;
+  targetDate?: string | null;
+}
+
+interface TreatmentGoal {
+  id: string;
+  description: string;
+  objectives: TreatmentObjective[];
+}
+
+interface TreatmentProblem {
+  id: string;
+  description: string;
+  goals: TreatmentGoal[];
+}
+
+interface TreatmentPlan {
+  id: string;
+  residentId: string;
+  status: string;
+  problems: TreatmentProblem[];
+}
+
+interface NoteTreatmentPlanLink {
+  objectiveId?: string;
+  progressIndicator?: string;
+  objective?: TreatmentObjective & {
+    goal?: TreatmentGoal & {
+      problem?: TreatmentProblem;
+    };
+  };
 }
 
 interface Alert {
@@ -210,6 +253,19 @@ function dateOf(value?: string | null) {
   return new Date(value).toLocaleDateString();
 }
 
+function allergiesOf(resident?: Resident) {
+  if (!resident?.allergies?.length) return "Not available from current endpoint";
+  return resident.allergies.join(", ");
+}
+
+function diagnosesOf(resident?: Resident) {
+  if (!resident) return ["Not listed"];
+  return [
+    resident.primaryDiagnosis,
+    ...(resident.secondaryDiagnoses ?? []),
+  ].filter(Boolean) as string[];
+}
+
 function dueAt(schedule: Schedule, anchor = new Date()) {
   const [hour, minute] = (schedule.scheduledTime ?? "00:00")
     .split(":")
@@ -236,6 +292,7 @@ export default function OperationsPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [treatmentPlans, setTreatmentPlans] = useState<TreatmentPlan[]>([]);
   const [settings, setSettings] = useState<FacilitySettings>(fallbackSettings);
   const [fallbackNotice, setFallbackNotice] = useState("");
   const [selectedResidentId, setSelectedResidentId] = useState("");
@@ -245,6 +302,10 @@ export default function OperationsPage() {
   const [prnIndication, setPrnIndication] = useState("");
   const [prnEffectiveness, setPrnEffectiveness] = useState("");
   const [prnFollowUpAt, setPrnFollowUpAt] = useState("");
+  const [noteTitle, setNoteTitle] = useState("");
+  const [noteContent, setNoteContent] = useState("");
+  const [noteObjectiveId, setNoteObjectiveId] = useState("");
+  const [noteProgressIndicator, setNoteProgressIndicator] = useState("PROGRESSING");
 
   const residentById = useMemo(
     () => new Map(residents.map((resident) => [resident.id, resident])),
@@ -294,6 +355,44 @@ export default function OperationsPage() {
   const residentOrders = selectedResident
     ? orders.filter((order) => order.residentId === selectedResident.id)
     : [];
+  const residentAdministrations = selectedResident
+    ? administrations
+        .filter((item) => item.residentId === selectedResident.id)
+        .sort(
+          (a, b) =>
+            new Date(b.administrationDate).getTime() -
+            new Date(a.administrationDate).getTime(),
+        )
+    : [];
+  const residentTasks = selectedResident
+    ? openTasks.filter((task) => task.residentId === selectedResident.id)
+    : [];
+  const residentNotes = selectedResident
+    ? notes
+        .filter((note) => note.residentId === selectedResident.id)
+        .sort(
+          (a, b) =>
+            new Date(b.updatedAt ?? b.createdAt ?? 0).getTime() -
+            new Date(a.updatedAt ?? a.createdAt ?? 0).getTime(),
+        )
+    : [];
+  const residentTreatmentPlans = selectedResident
+    ? treatmentPlans.filter((plan) => plan.residentId === selectedResident.id)
+    : [];
+  const availableObjectives = residentTreatmentPlans.flatMap((plan) =>
+    plan.problems.flatMap((problem) =>
+      problem.goals.flatMap((goal) =>
+        goal.objectives
+          .filter(
+            (objective) =>
+              !objective.status ||
+              objective.status === "NOT_STARTED" ||
+              objective.status === "IN_PROGRESS",
+          )
+          .map((objective) => ({ plan, problem, goal, objective })),
+      ),
+    ),
+  );
 
   function headers(includeJson = true) {
     const headers: Record<string, string> = {
@@ -345,7 +444,15 @@ export default function OperationsPage() {
         "/facility-settings",
         fallbackSettings,
       );
-      const [residentData, orderData, adminData, taskData, noteData, alertData] =
+      const [
+        residentData,
+        orderData,
+        adminData,
+        taskData,
+        noteData,
+        alertData,
+        treatmentPlanData,
+      ] =
         await Promise.all([
           loadResource<Resident[]>(
             "residents",
@@ -369,6 +476,11 @@ export default function OperationsPage() {
             "/compliance-alerts",
             [],
           ),
+          loadResource<TreatmentPlan[]>(
+            "treatment plans",
+            "/treatment-plans",
+            [],
+          ),
         ]);
 
       const errors = [
@@ -379,6 +491,7 @@ export default function OperationsPage() {
         taskData.error,
         noteData.error,
         alertData.error,
+        treatmentPlanData.error,
       ].filter(Boolean);
 
       setSettings(settingsResult.data ?? fallbackSettings);
@@ -388,6 +501,7 @@ export default function OperationsPage() {
       setTasks(taskData.data);
       setNotes(noteData.data);
       setAlerts(alertData.data);
+      setTreatmentPlans(treatmentPlanData.data);
       setSelectedResidentId((current) => current || residentData.data[0]?.id || "");
       setFallbackNotice(
         errors.length > 0
@@ -436,6 +550,11 @@ export default function OperationsPage() {
     setPrnFollowUpAt(new Date(Date.now() + 60 * 60 * 1000).toISOString().slice(0, 16));
   }
 
+  function openResidentChart(residentId: string) {
+    setSelectedResidentId(residentId);
+    setTab("chart");
+  }
+
   async function submitAction() {
     if (!selectedMed || !selectedStatus) return;
     if (selectedMed.order.id.startsWith("demo-")) {
@@ -471,6 +590,35 @@ export default function OperationsPage() {
       await load();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Medication action failed.");
+    }
+  }
+
+  async function submitClinicalNote() {
+    if (!selectedResident) return;
+    if (!availableObjectives.length || !noteObjectiveId) {
+      setMessage("Treatment plan objective required before signing/creating compliant note.");
+      return;
+    }
+    try {
+      await api("/clinical-notes", {
+        method: "POST",
+        body: JSON.stringify({
+          residentId: selectedResident.id,
+          title: noteTitle,
+          content: noteContent,
+          objectiveId: noteObjectiveId,
+          progressIndicator: noteProgressIndicator,
+        }),
+      });
+      setNoteTitle("");
+      setNoteContent("");
+      setNoteObjectiveId("");
+      setNoteProgressIndicator("PROGRESSING");
+      setMessage("Draft clinical note created.");
+      await load();
+      setTab("chart");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Clinical note creation failed.");
     }
   }
 
@@ -510,6 +658,7 @@ export default function OperationsPage() {
           ["pass", "Med Pass"],
           ["mar", "MAR Grid"],
           ["handoff", "Shift Handoff"],
+          ["chart", "Resident Chart"],
         ].map(([key, label]) => (
           <button
             className={tab === key ? "tab active" : "tab"}
@@ -533,7 +682,7 @@ export default function OperationsPage() {
           residentById={residentById}
           settings={settings}
           onAction={openAction}
-          onSelectResident={setSelectedResidentId}
+          onSelectResident={openResidentChart}
         />
       ) : null}
 
@@ -545,7 +694,7 @@ export default function OperationsPage() {
           residentOrders={residentOrders}
           dueMeds={dueMeds.filter((item) => item.order.residentId === selectedResident?.id)}
           settings={settings}
-          onSelectResident={setSelectedResidentId}
+          onSelectResident={openResidentChart}
           onAction={openAction}
         />
       ) : null}
@@ -558,7 +707,7 @@ export default function OperationsPage() {
           administrations={administrations}
           selectedResidentId={selectedResident?.id ?? ""}
           settings={settings}
-          onSelectResident={setSelectedResidentId}
+          onSelectResident={openResidentChart}
         />
       ) : null}
 
@@ -574,7 +723,33 @@ export default function OperationsPage() {
           orderById={orderById}
           settings={settings}
           onAction={openAction}
+          onSelectResident={openResidentChart}
+        />
+      ) : null}
+
+      {tab === "chart" ? (
+        <ResidentChart
+          resident={selectedResident}
+          residents={residents}
+          selectedResidentId={selectedResident?.id ?? ""}
+          settings={settings}
+          orders={residentOrders}
+          administrations={residentAdministrations}
+          tasks={residentTasks}
+          notes={residentNotes}
+          treatmentPlans={residentTreatmentPlans}
+          objectives={availableObjectives}
+          orderById={orderById}
+          noteTitle={noteTitle}
+          noteContent={noteContent}
+          noteObjectiveId={noteObjectiveId}
+          noteProgressIndicator={noteProgressIndicator}
           onSelectResident={setSelectedResidentId}
+          onNoteTitleChange={setNoteTitle}
+          onNoteContentChange={setNoteContent}
+          onNoteObjectiveChange={setNoteObjectiveId}
+          onNoteProgressChange={setNoteProgressIndicator}
+          onSubmitNote={submitClinicalNote}
         />
       ) : null}
 
@@ -623,10 +798,10 @@ function TodayView(props: {
     <div className="today-grid">
       <MedicationSection title="Overdue medications" items={props.overdue} tone="urgent" {...props} />
       <MedicationSection title="Due medications" items={props.dueNow} {...props} />
-      <ListSection title="PRNs today" residentById={props.residentById} items={props.prns.map((item) => ({ id: item.id, residentId: item.residentId, title: item.prnIndication ?? "PRN administered", time: item.prnFollowUpAt ?? item.administrationDate, action: "Review" }))} />
-      <ListSection title="Open tasks" residentById={props.residentById} items={props.tasks.map((item) => ({ id: item.id, residentId: item.residentId ?? undefined, title: item.title, time: item.dueAt, action: "Open" }))} />
-      <ListSection title="Unsigned notes" residentById={props.residentById} items={props.notes.map((item) => ({ id: item.id, residentId: item.residentId, title: item.title, time: item.updatedAt, action: "Review" }))} />
-      <ListSection title="Recent incidents/alerts" residentById={props.residentById} items={props.alerts.map((item) => ({ id: item.id, residentId: item.residentId ?? undefined, title: item.title, time: item.createdAt, action: "Review" }))} />
+      <ListSection title="PRNs today" residentById={props.residentById} onSelectResident={props.onSelectResident} items={props.prns.map((item) => ({ id: item.id, residentId: item.residentId, title: item.prnIndication ?? "PRN administered", time: item.prnFollowUpAt ?? item.administrationDate, action: "Review" }))} />
+      <ListSection title="Open tasks" residentById={props.residentById} onSelectResident={props.onSelectResident} items={props.tasks.map((item) => ({ id: item.id, residentId: item.residentId ?? undefined, title: item.title, time: item.dueAt, action: "Open" }))} />
+      <ListSection title="Unsigned notes" residentById={props.residentById} onSelectResident={props.onSelectResident} items={props.notes.map((item) => ({ id: item.id, residentId: item.residentId, title: item.title, time: item.updatedAt, action: "Review" }))} />
+      <ListSection title="Recent incidents/alerts" residentById={props.residentById} onSelectResident={props.onSelectResident} items={props.alerts.map((item) => ({ id: item.id, residentId: item.residentId ?? undefined, title: item.title, time: item.createdAt, action: "Review" }))} />
     </div>
   );
 }
@@ -670,10 +845,12 @@ function ListSection({
   title,
   items,
   residentById,
+  onSelectResident,
 }: {
   title: string;
   items: Array<{ id: string; residentId?: string; title: string; time?: string | null; action: string }>;
   residentById: Map<string, Resident>;
+  onSelectResident?: (id: string) => void;
 }) {
   return (
     <Card>
@@ -682,7 +859,17 @@ function ListSection({
         {items.length === 0 ? <p className="muted">No items.</p> : null}
         {items.map((item) => (
           <div className="compact-item" key={item.id}>
-            <div><strong>{item.residentId ? nameOf(residentById.get(item.residentId)) : "Facility"}</strong><p>{item.title}</p><p className="muted">{item.time ? timeOf(item.time) : "No due time"}</p></div>
+            <div>
+              {item.residentId ? (
+                <button className="resident-link" type="button" onClick={() => onSelectResident?.(item.residentId!)}>
+                  {nameOf(residentById.get(item.residentId))}
+                </button>
+              ) : (
+                <strong>Facility</strong>
+              )}
+              <p>{item.title}</p>
+              <p className="muted">{item.time ? timeOf(item.time) : "No due time"}</p>
+            </div>
             <Button size="sm" variant="outline">{item.action}</Button>
           </div>
         ))}
@@ -713,7 +900,7 @@ function MedPass({
   return (
     <div className="split-view">
       <Card className="resident-list"><CardHeader><CardTitle>{settings.clientLabel}s</CardTitle></CardHeader><CardContent className="list">{residents.map((resident) => <button className={selectedResidentId === resident.id ? "resident-row active" : "resident-row"} key={resident.id} type="button" onClick={() => onSelectResident(resident.id)}><strong>{nameOf(resident)}</strong><span>DOB {dateOf(resident.dateOfBirth)}</span></button>)}</CardContent></Card>
-      <Card><CardHeader><div><CardTitle>{nameOf(selectedResident)}</CardTitle><p className="muted">DOB {dateOf(selectedResident?.dateOfBirth)}</p></div><span className="allergy-box">Allergies: not available from current endpoint</span></CardHeader><CardContent className="stack"><h3>Due now</h3>{dueMeds.length === 0 ? <p className="muted">No due medications for this resident.</p> : null}{dueMeds.map((item) => <div className="work-item" key={`${item.order.id}-${item.schedule.id}`}><div><strong>{item.order.medicationName} {item.order.dose}</strong><p className="muted">{timeOf(item.dueAt)} - {item.order.route} - {item.order.frequency}</p></div><div className="action-strip"><Button size="sm" onClick={() => onAction(item, "ADMINISTERED")}>Administer</Button>{exceptionStatuses.map((status) => <Button key={status} size="sm" variant={status === "MEDICATION_ERROR" ? "destructive" : "outline"} onClick={() => onAction(item, status)}>{statusLabels[status]}</Button>)}</div></div>)}<h3>Active medications</h3>{residentOrders.map((order) => <div className="med-order" key={order.id}><strong>{order.medicationName} {order.dose}</strong><p className="muted">{order.route} - {order.frequency} - {order.status}</p>{(order.schedules ?? []).map((schedule) => <p className="schedule-line" key={schedule.id}>{schedule.type} {schedule.scheduledTime ?? "as needed"} {schedule.instructions ?? ""}</p>)}</div>)}</CardContent></Card>
+      <Card><CardHeader><div><CardTitle>{nameOf(selectedResident)}</CardTitle><p className="muted">DOB {dateOf(selectedResident?.dateOfBirth)}</p></div><span className="allergy-box">Allergies: {allergiesOf(selectedResident)}</span></CardHeader><CardContent className="stack"><h3>Due now</h3>{dueMeds.length === 0 ? <p className="muted">No due medications for this resident.</p> : null}{dueMeds.map((item) => <div className="work-item" key={`${item.order.id}-${item.schedule.id}`}><div><strong>{item.order.medicationName} {item.order.dose}</strong><p className="muted">{timeOf(item.dueAt)} - {item.order.route} - {item.order.frequency}</p></div><div className="action-strip"><Button size="sm" onClick={() => onAction(item, "ADMINISTERED")}>Administer</Button>{exceptionStatuses.map((status) => <Button key={status} size="sm" variant={status === "MEDICATION_ERROR" ? "destructive" : "outline"} onClick={() => onAction(item, status)}>{statusLabels[status]}</Button>)}</div></div>)}<h3>Active medications</h3>{residentOrders.map((order) => <div className="med-order" key={order.id}><strong>{order.medicationName} {order.dose}</strong><p className="muted">{order.route} - {order.frequency} - {order.status}</p>{(order.schedules ?? []).map((schedule) => <p className="schedule-line" key={schedule.id}>{schedule.type} {schedule.scheduledTime ?? "as needed"} {schedule.instructions ?? ""}</p>)}</div>)}</CardContent></Card>
     </div>
   );
 }
@@ -738,7 +925,189 @@ function MarGrid({
   const days = Array.from({ length: 31 }, (_, index) => index + 1);
   const initials = Array.from(new Set(administrations.map((item) => item.administeredByInitials).filter(Boolean)));
   return (
-    <Card><CardHeader><div><CardTitle>{settings.companyName} Monthly MAR</CardTitle><p className="muted">{nameOf(selectedResident)} - DOB {dateOf(selectedResident?.dateOfBirth)} - {settings.residentIdLabel}</p></div><Select value={selectedResidentId} onChange={(event) => onSelectResident(event.target.value)}>{residents.map((resident) => <option key={resident.id} value={resident.id}>{nameOf(resident)}</option>)}</Select></CardHeader><CardContent><div className="mar-allergies">Allergies: not available from current resident endpoint</div><div className="mar-scroll"><table className="mar-table"><thead><tr><th>Medication / schedule</th>{days.map((day) => <th key={day}>{day}</th>)}</tr></thead><tbody>{orders.flatMap((order) => (order.schedules ?? []).map((schedule) => <tr key={`${order.id}-${schedule.id}`}><td><strong>{order.medicationName}</strong><span>{order.dose} {order.route} - {schedule.type === "PRN" ? "PRN" : schedule.scheduledTime ?? order.frequency}</span></td>{days.map((day) => { const match = administrations.find((item) => item.medicationOrderId === order.id && item.scheduleId === schedule.id && new Date(item.administrationDate).getDate() === day); return <td className={match ? `mar-cell status-${match.status}` : "mar-cell"} key={day}>{match ? match.status === "ADMINISTERED" ? match.administeredByInitials : marMarks[match.status] : ""}</td>; })}</tr>))}</tbody></table></div><div className="initials-key"><strong>Staff initials key:</strong> {initials.length ? initials.join(", ") : "No administrations recorded"}</div></CardContent></Card>
+    <Card><CardHeader><div><CardTitle>{settings.companyName} Monthly MAR</CardTitle><p className="muted">{nameOf(selectedResident)} - DOB {dateOf(selectedResident?.dateOfBirth)} - {settings.residentIdLabel}</p></div><Select value={selectedResidentId} onChange={(event) => onSelectResident(event.target.value)}>{residents.map((resident) => <option key={resident.id} value={resident.id}>{nameOf(resident)}</option>)}</Select></CardHeader><CardContent><div className="mar-allergies">Allergies: {allergiesOf(selectedResident)}</div><div className="mar-scroll"><table className="mar-table"><thead><tr><th>Medication / schedule</th>{days.map((day) => <th key={day}>{day}</th>)}</tr></thead><tbody>{orders.flatMap((order) => (order.schedules ?? []).map((schedule) => <tr key={`${order.id}-${schedule.id}`}><td><strong>{order.medicationName}</strong><span>{order.dose} {order.route} - {schedule.type === "PRN" ? "PRN" : schedule.scheduledTime ?? order.frequency}</span></td>{days.map((day) => { const match = administrations.find((item) => item.medicationOrderId === order.id && item.scheduleId === schedule.id && new Date(item.administrationDate).getDate() === day); return <td className={match ? `mar-cell status-${match.status}` : "mar-cell"} key={day}>{match ? match.status === "ADMINISTERED" ? match.administeredByInitials : marMarks[match.status] : ""}</td>; })}</tr>))}</tbody></table></div><div className="initials-key"><strong>Staff initials key:</strong> {initials.length ? initials.join(", ") : "No administrations recorded"}</div></CardContent></Card>
+  );
+}
+
+function ResidentChart({
+  resident,
+  residents,
+  selectedResidentId,
+  settings,
+  orders,
+  administrations,
+  tasks,
+  notes,
+  treatmentPlans,
+  objectives,
+  orderById,
+  noteTitle,
+  noteContent,
+  noteObjectiveId,
+  noteProgressIndicator,
+  onSelectResident,
+  onNoteTitleChange,
+  onNoteContentChange,
+  onNoteObjectiveChange,
+  onNoteProgressChange,
+  onSubmitNote,
+}: {
+  resident?: Resident;
+  residents: Resident[];
+  selectedResidentId: string;
+  settings: FacilitySettings;
+  orders: MedOrder[];
+  administrations: Administration[];
+  tasks: Task[];
+  notes: Note[];
+  treatmentPlans: TreatmentPlan[];
+  objectives: Array<{
+    plan: TreatmentPlan;
+    problem: TreatmentProblem;
+    goal: TreatmentGoal;
+    objective: TreatmentObjective;
+  }>;
+  orderById: Map<string, MedOrder>;
+  noteTitle: string;
+  noteContent: string;
+  noteObjectiveId: string;
+  noteProgressIndicator: string;
+  onSelectResident: (id: string) => void;
+  onNoteTitleChange: (value: string) => void;
+  onNoteContentChange: (value: string) => void;
+  onNoteObjectiveChange: (value: string) => void;
+  onNoteProgressChange: (value: string) => void;
+  onSubmitNote: () => void;
+}) {
+  const diagnoses = diagnosesOf(resident);
+  const recentAdministrations = administrations.slice(0, 8);
+  const recentNotes = notes.slice(0, 6);
+
+  return (
+    <div className="chart-layout">
+      <Card className="resident-list">
+        <CardHeader><CardTitle>{settings.clientLabel}s</CardTitle></CardHeader>
+        <CardContent className="list">
+          {residents.map((item) => (
+            <button
+              className={selectedResidentId === item.id ? "resident-row active" : "resident-row"}
+              key={item.id}
+              type="button"
+              onClick={() => onSelectResident(item.id)}
+            >
+              <strong>{nameOf(item)}</strong>
+              <span>DOB {dateOf(item.dateOfBirth)}</span>
+            </button>
+          ))}
+        </CardContent>
+      </Card>
+
+      <div className="chart-main">
+        <Card>
+          <CardHeader>
+            <div>
+              <CardTitle>{nameOf(resident)}</CardTitle>
+              <p className="muted">DOB {dateOf(resident?.dateOfBirth)} - {settings.residentIdLabel}: {resident?.id ?? "Not selected"}</p>
+            </div>
+            <span className="allergy-box">Allergies: {allergiesOf(resident)}</span>
+          </CardHeader>
+          <CardContent className="chart-summary">
+            <div><strong>Status</strong><p>{resident?.status ?? "Not listed"}</p></div>
+            <div><strong>Diagnoses</strong><p>{diagnoses.length ? diagnoses.join(", ") : "Not listed"}</p></div>
+            <div><strong>Active meds</strong><p>{orders.filter((order) => order.status === "ACTIVE").length}</p></div>
+            <div><strong>Open tasks</strong><p>{tasks.length}</p></div>
+          </CardContent>
+        </Card>
+
+        <div className="chart-grid">
+          <Card>
+            <CardHeader><CardTitle>Active medications</CardTitle><span className="count">{orders.length}</span></CardHeader>
+            <CardContent className="list">
+              {orders.length === 0 ? <p className="muted">No active medications loaded.</p> : null}
+              {orders.map((order) => (
+                <div className="med-order" key={order.id}>
+                  <strong>{order.medicationName} {order.dose}</strong>
+                  <p className="muted">{order.route} - {order.frequency} - {order.status}</p>
+                  {(order.schedules ?? []).map((schedule) => (
+                    <p className="schedule-line" key={schedule.id}>{schedule.type} {schedule.scheduledTime ?? "as needed"} {schedule.instructions ?? ""}</p>
+                  ))}
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader><CardTitle>Recent medication administrations</CardTitle><span className="count">{recentAdministrations.length}</span></CardHeader>
+            <CardContent className="list">
+              {recentAdministrations.length === 0 ? <p className="muted">No administrations recorded.</p> : null}
+              {recentAdministrations.map((item) => (
+                <div className="compact-item" key={item.id}>
+                  <div>
+                    <strong>{orderById.get(item.medicationOrderId)?.medicationName ?? "Medication"} - {item.status}</strong>
+                    <p className="muted">{dateOf(item.administrationDate)} {timeOf(item.administrationDate)} - {item.administeredByInitials}</p>
+                    {item.reason || item.notes ? <p>{item.reason ?? item.notes}</p> : null}
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader><CardTitle>Open tasks</CardTitle><span className="count">{tasks.length}</span></CardHeader>
+            <CardContent className="list">
+              {tasks.length === 0 ? <p className="muted">No open tasks.</p> : null}
+              {tasks.map((task) => (
+                <div className="compact-item" key={task.id}>
+                  <div><strong>{task.title}</strong><p className="muted">{task.dueAt ? timeOf(task.dueAt) : "No due time"}</p></div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader><CardTitle>Recent clinical notes</CardTitle><span className="count">{recentNotes.length}</span></CardHeader>
+            <CardContent className="list">
+              {recentNotes.length === 0 ? <p className="muted">No clinical notes loaded.</p> : null}
+              {recentNotes.map((note) => (
+                <div className="med-order" key={note.id}>
+                  <strong>{note.title}</strong>
+                  <p className="muted">{note.status} - {dateOf(note.updatedAt ?? note.createdAt)}</p>
+                  {note.content ? <p>{note.content}</p> : null}
+                  {note.treatmentPlanLinks?.length ? <p className="schedule-line">Linked objective: {note.treatmentPlanLinks[0].objective?.description ?? note.treatmentPlanLinks[0].objectiveId}</p> : null}
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card>
+          <CardHeader><CardTitle>Treatment plan linkage</CardTitle><span className="count">{objectives.length}</span></CardHeader>
+          <CardContent className="list">
+            {treatmentPlans.length === 0 ? <p className="compliance-message">Treatment plan objective required before signing/creating compliant note.</p> : null}
+            {objectives.map(({ plan, problem, goal, objective }) => (
+              <div className="med-order" key={objective.id}>
+                <strong>{objective.description}</strong>
+                <p className="muted">{plan.status} - {problem.description} / {goal.description}</p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle>Create draft clinical note</CardTitle></CardHeader>
+          <CardContent className="note-form">
+            {!objectives.length ? (
+              <p className="compliance-message">Treatment plan objective required before signing/creating compliant note.</p>
+            ) : null}
+            <label>Title<Input value={noteTitle} onChange={(event) => onNoteTitleChange(event.target.value)} /></label>
+            <label>Objective<Select value={noteObjectiveId} onChange={(event) => onNoteObjectiveChange(event.target.value)} disabled={!objectives.length}><option value="">Select active objective</option>{objectives.map(({ problem, goal, objective }) => <option key={objective.id} value={objective.id}>{problem.description} / {goal.description} / {objective.description}</option>)}</Select></label>
+            <label>Progress<Select value={noteProgressIndicator} onChange={(event) => onNoteProgressChange(event.target.value)}><option>PROGRESSING</option><option>MAINTAINING</option><option>REGRESSING</option><option>NOT_ADDRESSED</option></Select></label>
+            <label>Note<Textarea rows={5} value={noteContent} onChange={(event) => onNoteContentChange(event.target.value)} /></label>
+            <div className="form-actions"><Button type="button" onClick={onSubmitNote} disabled={!objectives.length || !noteObjectiveId || !noteTitle || !noteContent}>Create draft</Button></div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
   );
 }
 
@@ -769,12 +1138,12 @@ function Handoff({
 }) {
   return (
     <div className="handoff-grid">
-      <ListSection title="Last 24h medication exceptions" residentById={residentById} items={exceptions.map((item) => ({ id: item.id, residentId: item.residentId, title: `${orderById.get(item.medicationOrderId)?.medicationName ?? "Medication"} - ${item.status}`, time: item.administrationDate, action: "Review" }))} />
-      <ListSection title="PRNs" residentById={residentById} items={prns.map((item) => ({ id: item.id, residentId: item.residentId, title: `${item.prnIndication ?? "PRN"} - ${item.prnEffectiveness ?? "follow-up pending"}`, time: item.prnFollowUpAt ?? item.administrationDate, action: "Review" }))} />
-      <ListSection title="Unsigned notes" residentById={residentById} items={unsignedNotes.map((item) => ({ id: item.id, residentId: item.residentId, title: item.title, time: item.updatedAt, action: "Review" }))} />
+      <ListSection title="Last 24h medication exceptions" residentById={residentById} onSelectResident={onSelectResident} items={exceptions.map((item) => ({ id: item.id, residentId: item.residentId, title: `${orderById.get(item.medicationOrderId)?.medicationName ?? "Medication"} - ${item.status}`, time: item.administrationDate, action: "Review" }))} />
+      <ListSection title="PRNs" residentById={residentById} onSelectResident={onSelectResident} items={prns.map((item) => ({ id: item.id, residentId: item.residentId, title: `${item.prnIndication ?? "PRN"} - ${item.prnEffectiveness ?? "follow-up pending"}`, time: item.prnFollowUpAt ?? item.administrationDate, action: "Review" }))} />
+      <ListSection title="Unsigned notes" residentById={residentById} onSelectResident={onSelectResident} items={unsignedNotes.map((item) => ({ id: item.id, residentId: item.residentId, title: item.title, time: item.updatedAt, action: "Review" }))} />
       <MedicationSection title="Overdue meds" items={overdue} residentById={residentById} tone="urgent" onAction={onAction} onSelectResident={onSelectResident} />
-      <ListSection title="Overdue/open tasks" residentById={residentById} items={tasks.map((item) => ({ id: item.id, residentId: item.residentId ?? undefined, title: item.title, time: item.dueAt, action: "Review" }))} />
-      <ListSection title="Recent incidents" residentById={residentById} items={alerts.map((item) => ({ id: item.id, residentId: item.residentId ?? undefined, title: item.title, time: item.createdAt, action: "Review" }))} />
+      <ListSection title="Overdue/open tasks" residentById={residentById} onSelectResident={onSelectResident} items={tasks.map((item) => ({ id: item.id, residentId: item.residentId ?? undefined, title: item.title, time: item.dueAt, action: "Review" }))} />
+      <ListSection title="Recent incidents" residentById={residentById} onSelectResident={onSelectResident} items={alerts.map((item) => ({ id: item.id, residentId: item.residentId ?? undefined, title: item.title, time: item.createdAt, action: "Review" }))} />
     </div>
   );
 }

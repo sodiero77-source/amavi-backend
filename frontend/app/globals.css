@@ -58,7 +58,20 @@ label { display: grid; gap: 5px; color: var(--muted); font-size: 12px; font-weig
 .card-title { margin: 0; font-size: 17px; line-height: 1.25; letter-spacing: 0; }
 .card-content { padding: 14px 16px; }
 .today-grid, .handoff-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-.split-view { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 14px; }
+.split-view, .chart-layout { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 14px; }
+.chart-main { display: grid; gap: 14px; }
+.chart-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.chart-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.chart-summary div {
+  border: 1px solid var(--border); border-radius: 6px; background: #fff; padding: 10px;
+}
+.chart-summary p { margin: 4px 0 0; color: var(--muted); }
+.note-form { display: grid; gap: 10px; }
+.form-actions { display: flex; justify-content: flex-end; }
+.compliance-message {
+  margin: 0; border: 1px solid var(--warning); border-radius: 6px; background: var(--warning-bg);
+  color: var(--warning); padding: 10px; font-weight: 800;
+}
 .list, .stack { display: grid; gap: 10px; }
 .count {
   display: inline-flex; align-items: center; justify-content: center; min-width: 30px; height: 30px;
@@ -123,7 +136,7 @@ label { display: grid; gap: 5px; color: var(--muted); font-size: 12px; font-weig
 .dialog-body { display: grid; gap: 12px; padding: 16px; }
 @media (max-width: 1100px) {
   .connection-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .today-grid, .handoff-grid, .split-view { grid-template-columns: 1fr; }
+  .today-grid, .handoff-grid, .split-view, .chart-layout, .chart-grid, .chart-summary { grid-template-columns: 1fr; }
 }
 @media (max-width: 700px) {
   .app-shell { padding: 10px; }
