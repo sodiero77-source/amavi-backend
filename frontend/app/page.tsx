@@ -595,8 +595,16 @@ export default function OperationsPage() {
 
   async function submitClinicalNote() {
     if (!selectedResident) return;
+    if (!token.trim()) {
+      setMessage("Bearer token required to create objective-linked clinical notes.");
+      return;
+    }
     if (!availableObjectives.length || !noteObjectiveId) {
       setMessage("Treatment plan objective required before signing/creating compliant note.");
+      return;
+    }
+    if (!noteTitle.trim() || !noteContent.trim()) {
+      setMessage("Title and note content are required to create a clinical note.");
       return;
     }
     try {
@@ -604,8 +612,8 @@ export default function OperationsPage() {
         method: "POST",
         body: JSON.stringify({
           residentId: selectedResident.id,
-          title: noteTitle,
-          content: noteContent,
+          title: noteTitle.trim(),
+          content: noteContent.trim(),
           objectiveId: noteObjectiveId,
           progressIndicator: noteProgressIndicator,
         }),
