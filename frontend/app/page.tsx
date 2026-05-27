@@ -258,6 +258,14 @@ function allergiesOf(resident?: Resident) {
   return resident.allergies.join(", ");
 }
 
+function authorizationHeader(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  return trimmed.toLowerCase().startsWith("bearer ")
+    ? trimmed
+    : `Bearer ${trimmed}`;
+}
+
 function diagnosesOf(resident?: Resident) {
   if (!resident) return ["Not listed"];
   return [
@@ -402,7 +410,8 @@ export default function OperationsPage() {
       "x-request-id": crypto.randomUUID(),
     };
     if (includeJson) headers["Content-Type"] = "application/json";
-    if (token) headers.Authorization = `Bearer ${token}`;
+    const authorization = authorizationHeader(token);
+    if (authorization) headers.Authorization = authorization;
     return headers;
   }
 
@@ -413,7 +422,13 @@ export default function OperationsPage() {
     });
     const text = await response.text();
     const data = text ? JSON.parse(text) : null;
-    if (!response.ok) throw new Error(data?.message ?? `Request failed ${response.status}`);
+    if (!response.ok) {
+      throw new Error(
+        response.status === 401
+          ? "Session expired. Login again."
+          : data?.message ?? `Request failed ${response.status}`,
+      );
+    }
     return data as T;
   }
 
