@@ -13,6 +13,7 @@ import { MedicationService } from "./medication.service";
 import {
   CreateMedicationOrderDto,
   CreateMedicationScheduleDto,
+  GetMedicationDueQueryDto,
   ListMedicationAdministrationsQueryDto,
   RecordMedicationAdministrationDto,
 } from "./dto";
@@ -73,5 +74,19 @@ export class MedicationAdministrationsController {
       request.actorContext,
       query,
     );
+  }
+}
+
+@Controller("mar")
+@UseGuards(JwtAuthGuard)
+export class MarController {
+  constructor(private readonly medicationService: MedicationService) {}
+
+  @Get("due")
+  getDueFeed(
+    @Req() request: any,
+    @Query() query: GetMedicationDueQueryDto,
+  ) {
+    return this.medicationService.getDueFeed(request.actorContext, query);
   }
 }

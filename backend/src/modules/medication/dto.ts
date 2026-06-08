@@ -2,6 +2,7 @@ import {
   IsArray,
   IsDateString,
   IsEnum,
+  IsIn,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -80,6 +81,22 @@ export class ListMedicationAdministrationsQueryDto {
   @IsDateString()
   @IsOptional()
   toDate?: string;
+}
+
+export class GetMedicationDueQueryDto {
+  @IsString()
+  @IsOptional()
+  @IsNotEmpty()
+  residentId?: string;
+
+  @IsDateString()
+  @IsOptional()
+  date?: string;
+
+  @IsString()
+  @IsOptional()
+  @IsIn(["medtech", "supervisor"])
+  view?: string;
 }
 
 export class RecordMedicationAdministrationDto {

@@ -7,6 +7,7 @@ import { strict as assert } from "node:assert";
 import { describe, it, mock } from "node:test";
 import { RequestActorContext } from "../../common/auth/request-context.interface";
 import {
+  MarController,
   MedicationAdministrationsController,
   MedicationController,
 } from "./medication.controller";
@@ -25,6 +26,9 @@ const order = {
   id: "order-1",
   facilityId: actor.facilityId,
   residentId: "resident-1",
+  medicationName: "Aspirin",
+  dose: "81mg",
+  route: "PO",
 };
 
 const scheduledSchedule = {
@@ -53,6 +57,7 @@ function createService(prismaOverrides: Record<string, any> = {}) {
     },
     medicationAdministration: {
       create: fn(),
+      findFirst: fn(),
       findMany: fn(),
     },
     ...prismaOverrides,
@@ -248,6 +253,130 @@ describe("MedicationService MAR workflow", () => {
       NotFoundException,
     );
   });
+
+  it("builds a MAR due feed with overdue, dueNow, dueSoon, and today items", async () => {
+    const fixedNow = new Date(2026, 4, 26, 9, 15, 0);
+    const originalDateNow = Date.now;
+    Date.now = () => fixedNow.getTime();
+
+    const dueSchedules = [
+      {
+        id: "schedule-1",
+        facilityId: actor.facilityId,
+        residentId: order.residentId,
+        medicationOrderId: order.id,
+        type: MedicationScheduleType.SCHEDULED,
+        isActive: true,
+        scheduledTime: "08:00",
+        scheduledDays: ["TUE"],
+        medicationOrder: order,
+        resident: { fullName: "Jane Doe" },
+        administrations: [],
+      },
+      {
+        id: "schedule-2",
+        facilityId: actor.facilityId,
+        residentId: order.residentId,
+        medicationOrderId: order.id,
+        type: MedicationScheduleType.SCHEDULED,
+        isActive: true,
+        scheduledTime: "09:00",
+        scheduledDays: ["TUE"],
+        medicationOrder: order,
+        resident: { fullName: "Jane Doe" },
+        administrations: [],
+      },
+      {
+        id: "schedule-3",
+        facilityId: actor.facilityId,
+        residentId: order.residentId,
+        medicationOrderId: order.id,
+        type: MedicationScheduleType.SCHEDULED,
+        isActive: true,
+        scheduledTime: "10:00",
+        scheduledDays: ["TUE"],
+        medicationOrder: order,
+        resident: { firstName: "Jane", lastName: "Doe" },
+        administrations: [],
+      },
+      {
+        id: "schedule-4",
+        facilityId: actor.facilityId,
+        residentId: order.residentId,
+        medicationOrderId: order.id,
+        type: MedicationScheduleType.PRN,
+        isActive: true,
+        scheduledTime: null,
+        scheduledDays: [],
+        medicationOrder: order,
+        resident: { firstName: "Jane", lastName: "Doe" },
+        administrations: [],
+      },
+    ];
+
+    const base = createService();
+    base.prisma.medicationSchedule.findMany.mock.mockImplementation(
+      async () => dueSchedules,
+    );
+    const { service } = base;
+
+    const result = await service.getDueFeed(actor, {
+      date: "2026-05-26",
+    });
+
+    Date.now = originalDateNow;
+
+    assert.equal(result.buckets.overdue.length, 1);
+    assert.equal(result.buckets.dueNow.length, 1);
+    assert.equal(result.buckets.dueToday.length, 2);
+    assert.equal(result.buckets.overdue[0].scheduledTime, "08:00");
+    assert.equal(result.buckets.dueNow[0].scheduledTime, "09:00");
+  });
+
+  it("skips already administered scheduled doses from the due feed and returns supervisor summary", async () => {
+    const fixedNow = new Date(2026, 4, 26, 9, 15, 0);
+    const originalDateNow = Date.now;
+    Date.now = () => fixedNow.getTime();
+
+    const dueSchedules = [
+      {
+        id: "schedule-1",
+        facilityId: actor.facilityId,
+        residentId: order.residentId,
+        medicationOrderId: order.id,
+        type: MedicationScheduleType.SCHEDULED,
+        isActive: true,
+        scheduledTime: "08:00",
+        scheduledDays: ["TUE"],
+        medicationOrder: order,
+        resident: { firstName: "Jane", lastName: "Doe" },
+        administrations: [
+          {
+            scheduleId: "schedule-1",
+            status: MedicationAdministrationStatus.ADMINISTERED,
+          },
+        ],
+      },
+    ];
+
+    const base = createService();
+    base.prisma.medicationSchedule.findMany.mock.mockImplementation(
+      async () => dueSchedules,
+    );
+    const { service } = base;
+
+    const result = await service.getDueFeed(actor, {
+      date: "2026-05-26",
+      view: "supervisor",
+    });
+
+    Date.now = originalDateNow;
+
+    assert.equal(result.buckets.overdue.length, 0);
+    assert.equal(result.medPassSummary.scheduled, 1);
+    assert.equal(result.medPassSummary.administered, 1);
+    assert.equal(result.medPassSummary.pending, 0);
+  });
 });
 
 describe("Medication controllers", () => {
@@ -282,6 +411,22 @@ describe("Medication controllers", () => {
     assert.deepEqual(service.recordAdministration.mock.calls[0].arguments, [
       actor,
       administrationDto,
+    ]);
+  });
+
+  it("passes actor context to MAR due feed requests", () => {
+    const service = {
+      getDueFeed: fn(),
+    };
+    const marController = new MarController(service as any);
+    const request = { actorContext: actor };
+    const query = { residentId: order.residentId, date: "2026-05-26" };
+
+    marController.getDueFeed(request, query);
+
+    assert.deepEqual(service.getDueFeed.mock.calls[0].arguments, [
+      actor,
+      query,
     ]);
   });
 });
