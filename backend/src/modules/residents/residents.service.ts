@@ -12,10 +12,10 @@ export class ResidentsService {
     private readonly eventBus: EventBusService,
   ) {}
 
-  async create(dto: CreateResidentDto) {
+  async create(actor: RequestActorContext, dto: CreateResidentDto) {
     const resident = await this.prisma.resident.create({
       data: {
-        facilityId: dto.facilityId,
+        facilityId: actor.facilityId,
         firstName: dto.firstName,
         lastName: dto.lastName,
         dateOfBirth: new Date(dto.dateOfBirth),
@@ -28,7 +28,7 @@ export class ResidentsService {
       occurredAt: new Date().toISOString(),
       payload: {
         residentId: resident.id,
-        facilityId: dto.facilityId,
+        facilityId: actor.facilityId,
       },
     });
 

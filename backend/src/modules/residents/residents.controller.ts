@@ -28,8 +28,8 @@ export class ResidentsController {
   constructor(private readonly residentsService: ResidentsService) {}
 
   @Post()
-  create(@Body() dto: CreateResidentDto) {
-    return this.residentsService.create(dto);
+  create(@Req() request: any, @Body() dto: CreateResidentDto) {
+    return this.residentsService.create(request.actorContext, dto);
   }
 
   @Get()

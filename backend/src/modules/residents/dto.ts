@@ -10,10 +10,6 @@ import {
 export class CreateResidentDto {
   @IsString()
   @IsNotEmpty()
-  facilityId!: string;
-
-  @IsString()
-  @IsNotEmpty()
   firstName!: string;
 
   @IsString()
