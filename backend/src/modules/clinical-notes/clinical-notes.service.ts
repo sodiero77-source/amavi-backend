@@ -115,6 +115,15 @@ export class ClinicalNotesService {
     return result;
   }
 
+  async countUnsigned(actor: RequestActorContext): Promise<number> {
+    return this.prisma.clinicalNote.count({
+      where: {
+        facilityId: actor.facilityId,
+        status: 'DRAFT',
+      },
+    });
+  }
+
   async list(actor: RequestActorContext) {
     return this.prisma.clinicalNote.findMany({
       where: { facilityId: actor.facilityId },

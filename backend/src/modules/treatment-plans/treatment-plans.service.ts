@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/db/prisma.service';
+import { RequestActorContext } from '../../common/auth/request-context.interface';
 import { CreateTreatmentPlanDto, ListTreatmentPlansQueryDto } from './dto';
 
 @Injectable()
@@ -48,6 +49,15 @@ export class TreatmentPlansService {
       },
       include: { problems: { include: { goals: { include: { objectives: true } } } } },
       orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async countActivePlans(actor: RequestActorContext): Promise<number> {
+    return this.prisma.treatmentPlanV2.count({
+      where: {
+        facilityId: actor.facilityId,
+        status: 'ACTIVE',
+      },
     });
   }
 }

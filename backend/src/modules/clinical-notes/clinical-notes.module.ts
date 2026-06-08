@@ -5,5 +5,6 @@ import { ClinicalNotesService } from './clinical-notes.service';
 @Module({
   controllers: [ClinicalNotesController],
   providers: [ClinicalNotesService],
+  exports: [ClinicalNotesService],
 })
 export class ClinicalNotesModule {}

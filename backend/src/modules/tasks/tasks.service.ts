@@ -36,4 +36,30 @@ export class TasksService {
       orderBy: { createdAt: 'desc' },
     });
   }
+
+  async listPendingTasksForToday(
+    actor: RequestActorContext,
+    start: Date,
+    end: Date,
+  ) {
+    return this.prisma.task.findMany({
+      where: {
+        facilityId: actor.facilityId,
+        status: { not: 'COMPLETED' },
+        dueAt: {
+          gte: start,
+          lte: end,
+        },
+      },
+      select: {
+        id: true,
+        title: true,
+        dueAt: true,
+        residentId: true,
+      },
+      orderBy: {
+        dueAt: 'asc',
+      },
+    });
+  }
 }

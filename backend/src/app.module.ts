@@ -13,6 +13,7 @@ import { TreatmentPlansModule } from "./modules/treatment-plans/treatment-plans.
 import { AiModule } from "./modules/ai/ai.module";
 import { AmaviAssistModule } from "./modules/amavi-assist";
 import { FacilitySettingsModule } from "./modules/facility-settings/facility-settings.module";
+import { DashboardModule } from "./modules/dashboard/dashboard.module";
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { FacilitySettingsModule } from "./modules/facility-settings/facility-set
     AiModule,
     AmaviAssistModule,
     FacilitySettingsModule,
+    DashboardModule,
   ],
 })
 export class AppModule {}

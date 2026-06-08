@@ -13,6 +13,7 @@
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:seed": "ts-node prisma/seed.ts",
+    "prisma:seed:ava-treatment-plan": "ts-node prisma/seed-ava-treatment-plan.ts",
     "lint": "eslint \"{src,test}/**/*.ts\" --fix"
   },
   "dependencies": {

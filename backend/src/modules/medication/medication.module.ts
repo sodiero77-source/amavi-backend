@@ -9,5 +9,6 @@ import { MedicationService } from "./medication.service";
 @Module({
   controllers: [MedicationController, MedicationAdministrationsController, MarController],
   providers: [MedicationService],
+  exports: [MedicationService],
 })
 export class MedicationModule {}

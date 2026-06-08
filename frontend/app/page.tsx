@@ -141,6 +141,17 @@ interface FacilitySettings {
   goalsLabel: string;
 }
 
+interface CreateDraftDiagnostics {
+  clicked: boolean;
+  selectedResidentIdExists: boolean;
+  selectedObjectiveIdExists: boolean;
+  titleNonEmpty: boolean;
+  contentNonEmpty: boolean;
+  tokenPresent: boolean;
+  tokenNormalized: boolean;
+  error?: string;
+}
+
 interface DueMed {
   order: MedOrder;
   schedule: Schedule;
@@ -314,6 +325,8 @@ export default function OperationsPage() {
   const [noteContent, setNoteContent] = useState("");
   const [noteObjectiveId, setNoteObjectiveId] = useState("");
   const [noteProgressIndicator, setNoteProgressIndicator] = useState("PROGRESSING");
+  const [createDraftDiagnostics, setCreateDraftDiagnostics] =
+    useState<CreateDraftDiagnostics | null>(null);
 
   const residentById = useMemo(
     () => new Map(residents.map((resident) => [resident.id, resident])),
@@ -609,6 +622,19 @@ export default function OperationsPage() {
   }
 
   async function submitClinicalNote() {
+    const authorization = authorizationHeader(token);
+    const diagnostics: CreateDraftDiagnostics = {
+      clicked: true,
+      selectedResidentIdExists: Boolean(selectedResident?.id),
+      selectedObjectiveIdExists: Boolean(noteObjectiveId),
+      titleNonEmpty: Boolean(noteTitle.trim()),
+      contentNonEmpty: Boolean(noteContent.trim()),
+      tokenPresent: Boolean(token.trim()),
+      tokenNormalized: Boolean(authorization?.startsWith("Bearer ")),
+    };
+    setCreateDraftDiagnostics(diagnostics);
+    setMessage("Create draft clicked");
+
     if (!selectedResident) return;
     if (!token.trim()) {
       setMessage("Bearer token required to create objective-linked clinical notes.");
@@ -623,20 +649,34 @@ export default function OperationsPage() {
       return;
     }
     try {
-      await api("/clinical-notes", {
-        method: "POST",
-        body: JSON.stringify({
-          residentId: selectedResident.id,
-          title: noteTitle.trim(),
-          content: noteContent.trim(),
-          objectiveId: noteObjectiveId,
-          progressIndicator: noteProgressIndicator,
-        }),
-      });
+      const response = await fetch(
+        `${apiBase.replace(/\/$/, "")}/clinical-notes`,
+        {
+          method: "POST",
+          headers: headers(true),
+          body: JSON.stringify({
+            residentId: selectedResident.id,
+            title: noteTitle.trim(),
+            content: noteContent.trim(),
+            objectiveId: noteObjectiveId,
+            progressIndicator: noteProgressIndicator,
+          }),
+        },
+      );
+      const text = await response.text();
+      const data = text ? JSON.parse(text) : null;
+      if (!response.ok) {
+        const backendError = JSON.stringify(data ?? { statusCode: response.status });
+        setCreateDraftDiagnostics({ ...diagnostics, error: backendError });
+        throw new Error(
+          response.status === 401 ? "Session expired. Login again." : backendError,
+        );
+      }
       setNoteTitle("");
       setNoteContent("");
       setNoteObjectiveId("");
       setNoteProgressIndicator("PROGRESSING");
+      setCreateDraftDiagnostics({ ...diagnostics, error: undefined });
       setMessage("Draft clinical note created.");
       await load();
       setTab("chart");
@@ -767,6 +807,7 @@ export default function OperationsPage() {
           noteContent={noteContent}
           noteObjectiveId={noteObjectiveId}
           noteProgressIndicator={noteProgressIndicator}
+          createDraftDiagnostics={createDraftDiagnostics}
           onSelectResident={setSelectedResidentId}
           onNoteTitleChange={setNoteTitle}
           onNoteContentChange={setNoteContent}
@@ -968,6 +1009,7 @@ function ResidentChart({
   noteContent,
   noteObjectiveId,
   noteProgressIndicator,
+  createDraftDiagnostics,
   onSelectResident,
   onNoteTitleChange,
   onNoteContentChange,
@@ -995,6 +1037,7 @@ function ResidentChart({
   noteContent: string;
   noteObjectiveId: string;
   noteProgressIndicator: string;
+  createDraftDiagnostics: CreateDraftDiagnostics | null;
   onSelectResident: (id: string) => void;
   onNoteTitleChange: (value: string) => void;
   onNoteContentChange: (value: string) => void;
@@ -1126,7 +1169,19 @@ function ResidentChart({
             <label>Objective<Select value={noteObjectiveId} onChange={(event) => onNoteObjectiveChange(event.target.value)} disabled={!objectives.length}><option value="">Select active objective</option>{objectives.map(({ problem, goal, objective }) => <option key={objective.id} value={objective.id}>{problem.description} / {goal.description} / {objective.description}</option>)}</Select></label>
             <label>Progress<Select value={noteProgressIndicator} onChange={(event) => onNoteProgressChange(event.target.value)}><option>PROGRESSING</option><option>MAINTAINING</option><option>REGRESSING</option><option>NOT_ADDRESSED</option></Select></label>
             <label>Note<Textarea rows={5} value={noteContent} onChange={(event) => onNoteContentChange(event.target.value)} /></label>
-            <div className="form-actions"><Button type="button" onClick={onSubmitNote} disabled={!objectives.length || !noteObjectiveId || !noteTitle || !noteContent}>Create draft</Button></div>
+            {createDraftDiagnostics ? (
+              <div className="compliance-message">
+                <p>Create draft clicked</p>
+                <p>selectedResidentId exists: {createDraftDiagnostics.selectedResidentIdExists ? "yes" : "no"}</p>
+                <p>selectedObjectiveId exists: {createDraftDiagnostics.selectedObjectiveIdExists ? "yes" : "no"}</p>
+                <p>title non-empty: {createDraftDiagnostics.titleNonEmpty ? "yes" : "no"}</p>
+                <p>content non-empty: {createDraftDiagnostics.contentNonEmpty ? "yes" : "no"}</p>
+                <p>token present: {createDraftDiagnostics.tokenPresent ? "yes" : "no"}</p>
+                <p>token normalized: {createDraftDiagnostics.tokenNormalized ? "yes" : "no"}</p>
+                {createDraftDiagnostics.error ? <p>request error: {createDraftDiagnostics.error}</p> : null}
+              </div>
+            ) : null}
+            <div className="form-actions"><Button type="button" onClick={onSubmitNote}>Create draft</Button></div>
           </CardContent>
         </Card>
       </div>
